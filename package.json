@@ -1,13 +1,13 @@
 {
   "name": "prerender-docker",
-  "version": "5.21.2",
+  "version": "5.21.6",
   "description": "Containerization of the Prerender service",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "prerender": "5.21.2",
+    "prerender": "5.21.6",
     "prerender-memory-cache": "1.0.2"
   }
 }
