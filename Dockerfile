@@ -9,5 +9,7 @@ RUN npm install --no-package-lock
 
 EXPOSE 3000
 
+LABEL org.opencontainers.image.description "Containerization of the Prerender Service"
+
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "server.js"]
