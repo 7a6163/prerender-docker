@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:16-alpine
 
 RUN apk add --no-cache tini chromium
 
@@ -9,7 +9,7 @@ RUN npm install --no-package-lock
 
 EXPOSE 3000
 
-LABEL org.opencontainers.image.description "Containerization of the Prerender Service"
+LABEL org.opencontainers.image.description="Containerization of the Prerender Service"
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "server.js"]
