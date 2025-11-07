@@ -8,6 +8,6 @@
   },
   "dependencies": {
     "prerender": "5.21.6",
-    "prerender-redis-cache-ng": "^1.0.3"
+    "prerender-redis-cache-ng": "^1.0.4"
   }
 }
