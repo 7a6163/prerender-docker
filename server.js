@@ -36,8 +36,17 @@ server.use({
     requestReceived: async function(req, res, next) {
         const url = req.prerender.url;
         const lockKey = `prerender:lock:${url}`;
+        const cacheKey = url.replace(/^https?:\/\//, ''); // Same format as prerender-redis-cache-ng
 
         try {
+            // Check if cached (skip lock if cache exists)
+            const cached = await redis.exists(cacheKey);
+            if (cached) {
+                console.log(`[Prerender] Cache hit, skipping lock: ${url}`);
+                next(); // Let cache middleware handle it
+                return;
+            }
+
             // Check global concurrent limit
             if (currentRenders >= MAX_CONCURRENT_RENDERS) {
                 console.log(`[Prerender] Max concurrent renders reached (${currentRenders}/${MAX_CONCURRENT_RENDERS}), rejecting: ${url}`);

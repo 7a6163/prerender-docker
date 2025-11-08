@@ -15,15 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lock timeout configuration via `LOCK_TTL` environment variable
 - `Retry-After: 5` header for 429 responses
 - Real-time rendering progress logging
+- Comprehensive test suite (unit + integration tests)
 
 ### Changed
 - Upgraded to Node.js 24-alpine base image
 - Enhanced Redis cache with request deduplication
 - Improved error handling with Redis fallback
+- **Performance optimization**: Cache-hit requests now skip lock acquisition (2-4ms response time)
 
 ### Fixed
 - Prevented duplicate rendering of the same URL by concurrent requests
 - Added resource protection against excessive concurrent renders
+- **Cache optimization**: Eliminated unnecessary lock checks for cached content, preventing false 429 responses
 
 ## [5.21.6] - Previous Release
 
