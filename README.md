@@ -60,6 +60,28 @@ curl http://localhost:3000/render?url=http://example.com
 
 - `REDIS_URL`: Redis connection URL (default: `redis://localhost:6379`)
 - `PAGE_TTL`: Cache expiration time in seconds (default: `86400` = 1 day, set to `0` for no expiration)
+- `MAX_CONCURRENT_RENDERS`: Maximum concurrent rendering processes (default: `10`)
+- `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders (default: `30`)
+
+### Concurrency Control
+
+The service implements intelligent request deduplication and concurrency management:
+
+- **Per-URL Locking**: Only one request can render a specific URL at a time. Concurrent requests for the same URL receive a `429 Too Many Requests` response with `Retry-After: 5` header
+- **Global Concurrency Limit**: Maximum concurrent renders across all URLs (configurable via `MAX_CONCURRENT_RENDERS`)
+- **Automatic Retry**: Clients receiving 429 should retry after the suggested delay. The second request will typically hit the cache and return instantly
+
+**Example:**
+```
+10 concurrent requests for https://example.com/product/123
+  ↓
+Request 1: Renders (1-2s) → Caches → Returns 200
+Request 2-10: Return 429 immediately (3ms)
+  ↓
+After 5 seconds, retry
+  ↓
+All requests: Return from cache (50ms) → 200
+```
 
 ### Redis Cache
 

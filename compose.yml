@@ -5,6 +5,9 @@ services:
       - "3000:3000"
     environment:
       - REDIS_URL=redis://valkey:6379
+      - PAGE_TTL=604800  # Cache TTL: 7 days (seconds)
+      - MAX_CONCURRENT_RENDERS=10  # Max concurrent rendering (different URLs)
+      - LOCK_TTL=30  # Lock timeout (seconds)
     depends_on:
       - valkey
     restart: unless-stopped
