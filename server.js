@@ -4,16 +4,26 @@ const prerender = require('prerender');
 const redisCache = require('prerender-redis-cache-ng');
 const Redis = require('ioredis');
 
+// Build Chrome flags based on configuration
+const chromeFlags = [
+    '--no-sandbox',
+    '--headless',
+    '--disable-gpu',
+    '--remote-debugging-port=9222',
+    '--hide-scrollbars',
+    '--disable-dev-shm-usage',
+    '--disable-features=AutoupgradeMixedContent,HttpsUpgrades'
+];
+
+// Optionally disable images for faster rendering
+const DISABLE_IMAGES = process.env.DISABLE_IMAGES === 'true';
+if (DISABLE_IMAGES) {
+    chromeFlags.push('--blink-settings=imagesEnabled=false');
+    console.log('[Prerender Config] Images disabled for faster rendering');
+}
+
 const server = prerender({
-    chromeFlags: [
-        '--no-sandbox',
-        '--headless',
-        '--disable-gpu',
-        '--remote-debugging-port=9222',
-        '--hide-scrollbars',
-        '--disable-dev-shm-usage',
-        '--disable-features=AutoupgradeMixedContent,HttpsUpgrades'
-    ],
+    chromeFlags,
     forwardHeaders: true,
     chromeLocation: '/usr/bin/chromium-browser'
 });

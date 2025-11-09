@@ -16,12 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Retry-After: 5` header for 429 responses
 - Real-time rendering progress logging
 - Comprehensive test suite (unit + integration tests)
+- **Image disable option**: `DISABLE_IMAGES` environment variable for 2-5x faster rendering
+- Performance testing script and documentation
 
 ### Changed
 - Upgraded to Node.js 24-alpine base image
 - Enhanced Redis cache with request deduplication
 - Improved error handling with Redis fallback
 - **Performance optimization**: Cache-hit requests now skip lock acquisition (2-4ms response time)
+- **Rendering speed**: Optional image loading disable for SEO/crawler use cases
 
 ### Fixed
 - Prevented duplicate rendering of the same URL by concurrent requests

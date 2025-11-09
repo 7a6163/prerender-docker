@@ -8,6 +8,7 @@ services:
       - PAGE_TTL=604800  # Cache TTL: 7 days (seconds)
       - MAX_CONCURRENT_RENDERS=10  # Max concurrent rendering (different URLs)
       - LOCK_TTL=30  # Lock timeout (seconds)
+      - DISABLE_IMAGES=false  # Set to 'true' to disable image loading for faster rendering
     depends_on:
       - valkey
     restart: unless-stopped
