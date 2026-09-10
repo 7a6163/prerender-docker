@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.25.1] - 2026-09-11
+
+### Fixed
+- `package.json` reports 5.25.1. The `v5.25.0` tag was cut one commit before the version bump, so the published `5.25.0` image carries the 5.25.0 code while reporting `5.24.0` - which breaks the deployment check of asking the container what it is. The tag is left where it is rather than moved, because its image is already published
+
 ### Changed
 - README documents `window.prerenderReady`, which is the only way out for a page whose never-ending request goes to its own origin - `BLOCK_HOSTS` cannot help there. Once the page sets the flag, upstream captures a second later without waiting for network idle. Measured on a page holding a request that never finishes: 15.16s without the signal, 1.60s with it
 
