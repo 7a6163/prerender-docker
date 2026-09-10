@@ -44,4 +44,4 @@ Things that bite:
 
 ## Versioning / release
 
-`package.json` version tracks the pinned upstream `prerender` version (currently 5.21.6) — bump both together. Pushing a `v*.*.*` tag triggers `.github/workflows/docker-build-and-push.yml`, which builds linux/amd64+arm64 and pushes to GHCR and Docker Hub.
+`package.json` version used to mirror the pinned upstream `prerender` version, which stopped being possible at 5.22.0: upstream's last release was 5.21.6 and its repository is gone, so the mirror could no longer express "same renderer, new image". Versions are now this image's own, still inside `5.x` so published `:5` and `:5.21`/`:5.22` tags keep resolving for existing users; which `prerender` is inside is recorded in `package.json` (pinned exactly) and the CHANGELOG. Pushing a `v*.*.*` tag triggers `.github/workflows/docker-build-and-push.yml`, which builds linux/amd64+arm64 and pushes to GHCR and Docker Hub.

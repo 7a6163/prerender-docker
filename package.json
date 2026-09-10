@@ -1,6 +1,6 @@
 {
   "name": "prerender-docker",
-  "version": "5.21.6",
+  "version": "5.22.0",
   "description": "Containerization of the Prerender service",
   "main": "server.js",
   "scripts": {
