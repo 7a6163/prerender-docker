@@ -95,7 +95,7 @@ npm run test:watch
 
 Example:
 ```bash
-PRERENDER_URL=http://10.240.0.11:3000 npm test
+PRERENDER_URL=http://prerender.internal:3000 npm test
 ```
 
 ## Test Coverage
