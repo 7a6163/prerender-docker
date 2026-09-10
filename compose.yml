@@ -8,7 +8,12 @@ services:
       - PAGE_TTL=604800  # Cache TTL: 7 days (seconds)
       - MAX_CONCURRENT_RENDERS=10  # Max concurrent rendering (different URLs)
       - LOCK_TTL=30  # Lock timeout (seconds)
-      - DISABLE_IMAGES=false  # Set to 'true' to disable image loading for faster rendering
+      - DISABLE_IMAGES=false  # Measured no effect on real pages, see README
+      - WAIT_AFTER_LAST_REQUEST=100  # Upstream default 500ms; measured ~400ms saved per render
+      - PAGE_DONE_CHECK_INTERVAL=100  # Upstream default 500ms
+    # Idle ~300MB, plus ~90MB per concurrent render, so MAX_CONCURRENT_RENDERS=10
+    # tops out around 1.2GB. Keep this above that or the host absorbs the spike.
+    mem_limit: 1500m
     depends_on:
       - valkey
     restart: unless-stopped

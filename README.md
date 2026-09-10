@@ -5,7 +5,7 @@ This repository contains the configuration and setup to containerize the Prerend
 ## Features
 
 - 🚀 **High Performance**: Chrome 142 with optimized flags for Docker
-- 💾 **Redis Cache**: Persistent caching with Valkey/Redis for faster response times (24x faster on cache hits!)
+- 💾 **Redis Cache**: Persistent caching with Valkey/Redis (cache hits are ~1000x faster than a render)
 - 🔄 **Protocol-Agnostic**: HTTP and HTTPS URLs share the same cache
 - 🛡️ **Certificate Handling**: Configured to handle SSL certificate issues
 - 🐳 **Production Ready**: Docker Compose setup with Valkey included
@@ -50,7 +50,7 @@ To use the Prerender service, access it on localhost at port 3000:
 # First request (will render and cache)
 curl http://localhost:3000/render?url=http://example.com
 
-# Second request (served from cache, ~24x faster!)
+# Second request (served from cache, ~2ms)
 curl http://localhost:3000/render?url=http://example.com
 ```
 
@@ -62,7 +62,9 @@ curl http://localhost:3000/render?url=http://example.com
 - `PAGE_TTL`: Cache expiration time in seconds (default: `86400` = 1 day, set to `0` for no expiration)
 - `MAX_CONCURRENT_RENDERS`: Maximum concurrent rendering processes (default: `10`)
 - `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders, and how long a duplicate request waits before giving up (default: `30`; keep it above `PAGE_LOAD_TIMEOUT`, which defaults to 20s)
-- `DISABLE_IMAGES`: Disable image loading for faster rendering (default: `false`, set to `true` for 2-5x speed boost)
+- `DISABLE_IMAGES`: Disable image loading (default: `false`). Measured no effect on real pages - see below
+- `WAIT_AFTER_LAST_REQUEST`: Milliseconds to wait after the last network request before capturing (upstream default: `500`; `compose.yml` sets `100`)
+- `PAGE_DONE_CHECK_INTERVAL`: Page-done polling interval in milliseconds (upstream default: `500`; `compose.yml` sets `100`)
 
 ### Concurrency Control
 
@@ -87,26 +89,36 @@ Request 2-10: Served from cache (50ms) → 200 (one render total)
 
 ### Performance Optimization
 
-#### Disable Images for Faster Rendering
+#### What actually costs time
 
-For SEO and crawler use cases where images are not needed, you can disable image loading for 2-5x faster rendering:
+Measured on this setup (Wikipedia `/wiki/Cat`, repeated runs):
 
-```yaml
-# compose.yml
-environment:
-  - DISABLE_IMAGES=true
-```
+| Setting | Render time |
+|---|---|
+| Cache hit | **0.002-0.003s** |
+| Cold render, defaults | 2.9-3.7s |
+| Cold render, `DISABLE_IMAGES=true` | 2.9-3.4s (no measurable change) |
+| Cold render, `WAIT_AFTER_LAST_REQUEST=100` + `PAGE_DONE_CHECK_INTERVAL=100` | **2.3-2.7s** |
 
-**Performance comparison:**
-- With images: ~1.5-3 seconds per page
-- Without images: ~300-600ms per page
+Two things follow:
 
-**When to use:**
-- ✅ SEO crawlers (Googlebot, Bingbot) - Only need text content
-- ✅ Link preview generators - Just need meta tags
-- ✅ High-traffic scenarios - Maximize throughput
-- ❌ Social media previews - Need images for og:image
-- ❌ Screenshot services - Need visual representation
+- **Cache hit rate dominates everything else.** A hit is ~1000x faster than a
+  render, so anything that improves hit rate beats anything that speeds up
+  rendering.
+- **`DISABLE_IMAGES` does not help.** It blocks image decoding, but the time
+  goes to the upstream site's response and the page's own JavaScript. It is
+  left `false` in `compose.yml`. Try it on your own pages before believing any
+  number, including this one.
+
+Trimming the two fixed waits saves ~400ms per render with no truncated
+content (verified: same page, 1.93MB of HTML either way).
+
+#### Memory
+
+Idle is ~300MB once Chrome has settled, plus ~90MB per concurrent render
+(measured: 5 concurrent renders peaked at 767MB). `MAX_CONCURRENT_RENDERS=10`
+therefore implies a ceiling around 1.2GB, which is what `mem_limit` in
+`compose.yml` is sized for.
 
 ### Redis Cache
 
@@ -114,21 +126,29 @@ The service uses **prerender-redis-cache-ng** for caching:
 
 - **Cache Keys**: Protocol-agnostic (HTTP and HTTPS share same cache)
   - Example: Both `http://example.com` and `https://example.com` use key `example.com`
-- **Cache Invalidation**: Supports DELETE requests to clear cache
-  ```bash
-  # Clear single URL
-  curl -X DELETE http://localhost:3000/render?url=http://example.com
+- **Cache Invalidation**: The upstream `prerender` server only registers `GET`
+  and `POST` routes (`app.get('*')` / `app.post('*')` in `prerender/lib/index.js`),
+  so a `DELETE /render?url=...` returns `Cannot DELETE /render` and never reaches
+  the cache plugin. Invalidate directly in Redis instead:
 
-  # Clear pattern (all URLs matching wildcard)
-  curl -X DELETE http://localhost:3000/render?url=http://example.com/*
+  ```bash
+  # Clear single URL (note: keys have no protocol prefix)
+  docker compose exec valkey redis-cli del 'example.com/path'
+
+  # Clear a pattern
+  docker compose exec valkey redis-cli --scan --pattern 'example.com/*' \
+    | xargs -r docker compose exec -T valkey redis-cli del
   ```
 
 ### Chrome Flags
 
 Configured with flags optimized for Docker and Chrome 142:
 - `--no-sandbox`: Required for Docker
-- `--ignore-certificate-errors`: Handle SSL certificate issues
+- `--disable-dev-shm-usage`: Avoid Docker's small /dev/shm
 - `--disable-features=AutoupgradeMixedContent,HttpsUpgrades`: Prevent automatic HTTPS upgrade
+
+Passing `chromeFlags` replaces upstream's default list entirely, so
+`--remote-debugging-port=9222` has to stay in `server.js`.
 
 ## Architecture
 
@@ -140,10 +160,10 @@ Web Crawler → Prerender Service (Port 3000) → Chromium
 
 ## Performance
 
-**Cache Performance:**
-- First request (no cache): ~1.5 seconds
-- Second request (cached): ~0.06 seconds
-- **~24x faster** with cache!
+**Cache Performance** (measured, see Performance Optimization above):
+- First request (no cache): 1.1-3.7s depending on the page
+- Second request (cached): 0.002-0.003s
+- Cache hits are ~1000x faster, and cost no Chrome memory at all
 
 ## Docker Compose Services
 

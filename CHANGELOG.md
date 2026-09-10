@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced Redis cache with request deduplication
 - Improved error handling with Redis fallback
 - **Performance optimization**: Cache-hit requests now skip lock acquisition (2-4ms response time)
+- Trimmed `WAIT_AFTER_LAST_REQUEST` and `PAGE_DONE_CHECK_INTERVAL` to 100ms in `compose.yml` (~400ms saved per render, measured)
+- Added `mem_limit` sized for `MAX_CONCURRENT_RENDERS=10` (~300MB idle + ~90MB per concurrent render)
+- Replaced unverified performance claims in README with measured numbers; documented that `DISABLE_IMAGES` has no measurable effect and that `DELETE` cache invalidation never worked (upstream registers no DELETE route)
 - **Rendering speed**: Optional image loading disable for SEO/crawler use cases
 
 ### Fixed
