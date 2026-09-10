@@ -33,7 +33,7 @@ Request flow through `server.js` middleware, in registration order (order is loa
 2. `prerender-redis-cache-ng` — serves/stores the rendered HTML.
 3. `blacklist` → `httpHeaders` → `removeScriptTags`.
 
-The lock is released in the same middleware's `beforeSend`, which decrements `currentRenders` *before* the Redis `DEL` — a throw there must not leak the render slot. The cache write happens in the cache plugin's `pageLoaded`, i.e. before `beforeSend`, which is why "lock gone but cache empty" reliably means the render failed.
+The lock is released in the same middleware's `beforeSend`, via a Lua compare-and-delete against the token stored at acquire time (`req.prerender.reqId`) — a render that outlives `LOCK_TTL` must not delete the lock the *next* request has since taken. It decrements `currentRenders` *before* the Redis call — a throw there must not leak the render slot. The cache write happens in the cache plugin's `pageLoaded`, i.e. before `beforeSend`, which is why "lock gone but cache empty" reliably means the render failed.
 
 Things that bite:
 

@@ -40,6 +40,12 @@ const MAX_WAIT_MS = parseInt(process.env.MAX_WAIT_MS, 10) || 8000;
 // Track current rendering count
 let currentRenders = 0;
 
+// Release a lock only if this request still holds it. A render that outlives
+// LOCK_TTL lets the next request take the lock, and an unconditional DEL would
+// release that one - freeing the URL for a third render while the second is
+// still going, and leaving its waiters to see "lock gone, cache empty" and 429.
+const RELEASE_LOCK = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0`;
+
 console.log(`[Prerender Config] MAX_CONCURRENT_RENDERS: ${MAX_CONCURRENT_RENDERS}`);
 console.log(`[Prerender Config] LOCK_TTL: ${LOCK_TTL}s`);
 console.log(`[Prerender Config] MAX_WAIT_MS: ${MAX_WAIT_MS}ms`);
@@ -59,8 +65,10 @@ server.use({
                 return;
             }
 
-            // Try to acquire lock (NX = only set if not exists)
-            const lockAcquired = await redis.set(lockKey, Date.now(), 'EX', LOCK_TTL, 'NX');
+            // Try to acquire lock (NX = only set if not exists). The value is this
+            // request's id so the holder can be identified at release time.
+            const lockToken = req.prerender.reqId;
+            const lockAcquired = await redis.set(lockKey, lockToken, 'EX', LOCK_TTL, 'NX');
 
             if (lockAcquired) {
                 // Only a request that would start a new render is subject to the
@@ -68,7 +76,7 @@ server.use({
                 // URLs already being rendered, which switched deduplication off
                 // exactly when load made it worth having.
                 if (currentRenders >= MAX_CONCURRENT_RENDERS) {
-                    await redis.del(lockKey);
+                    await redis.eval(RELEASE_LOCK, 1, lockKey, lockToken);
                     console.log(`[Prerender] Max concurrent renders reached (${currentRenders}/${MAX_CONCURRENT_RENDERS}), rejecting: ${url}`);
                     res.send(503, `Service busy. Currently rendering ${currentRenders} pages. Please retry in a few seconds.`);
                     return;
@@ -78,6 +86,7 @@ server.use({
                 currentRenders++;
                 console.log(`[Prerender] Lock acquired (${currentRenders}/${MAX_CONCURRENT_RENDERS}), rendering: ${url}`);
                 req.prerender.lockKey = lockKey;
+                req.prerender.lockToken = lockToken;
                 next();
                 return;
             }
@@ -137,7 +146,10 @@ server.use({
             currentRenders--;
             console.log(`[Prerender] Lock released (${currentRenders}/${MAX_CONCURRENT_RENDERS}): ${url}`);
             try {
-                await redis.del(req.prerender.lockKey);
+                const released = await redis.eval(RELEASE_LOCK, 1, req.prerender.lockKey, req.prerender.lockToken);
+                if (!released) {
+                    console.log(`[Prerender] Lock had expired and been taken by another request, left alone: ${url}`);
+                }
             } catch (err) {
                 console.error(`[Prerender] Failed to release lock for ${url}:`, err.message);
             }
