@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Duplicate concurrent requests now wait for the in-flight render and are served from the cache (200) instead of receiving 429 immediately; 429 is now only returned if that render fails or exceeds `LOCK_TTL`
 - Removed `package.test.json` and the `test:load` script (duplicate/dead)
 - Removed the `forwardHeaders: true` option, which prerender 5.21.6 does not read (the crawler's headers were never reaching the rendered page)
-- Pinned patched transitive dependencies via `overrides` (`ws` 7.5.13, `path-to-regexp` 0.1.13, `qs` 6.16.0, `body-parser` 1.20.8), clearing every production `npm audit` finding except a non-exploitable `uuid` advisory
+- Pinned patched transitive dependencies via `overrides` (`ws` 7.5.13, `path-to-regexp` 0.1.13, `qs` 6.16.0, `body-parser` 1.20.8, `uuid` 14.0.2), clearing every `npm audit` finding
 - Upgraded to Node.js 26-alpine base image
 - Image installs from `package-lock.json` with `npm ci --omit=dev` instead of an unpinned `npm install --no-package-lock`, and copies dependency manifests before `server.js` so editing the server no longer invalidates the install layer
 - Replaced Mocha/Chai/axios with Node's built-in test runner (`node:test` + `node:assert` + `fetch`), removing all five devDependencies (`mocha`, `chai`, `axios`, `autocannon`, `sinon`). `sinon` and `autocannon` were never imported by any test. This takes `npm audit` from 14 findings (7 high) to 2, and the lockfile from 225 packages to 104
