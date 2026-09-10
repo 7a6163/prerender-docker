@@ -68,6 +68,7 @@ curl http://localhost:3000/render?url=http://example.com
 - `STRIP_QUERY_PARAMS`: Query parameters removed before the URL becomes a lock, a cache key and a render (default: a built-in tracking-parameter list; set to empty to strip nothing)
 - `BROWSER_FORCE_RESTART_PERIOD`: How often Chrome is recycled regardless of in-flight requests, in milliseconds (upstream default: `3600000`)
 - `BLOCK_HOSTS`: Comma-separated hosts Chrome must not reach (default: none) - see Pages that never finish loading
+- `TIMEOUT_STATUS_CODE`: Status code for a render that hit `PAGE_LOAD_TIMEOUT` (`compose.yml` sets `503`; unset means `200`, which caches the partial capture)
 - `DISABLE_IMAGES`: Disable image loading (default: `false`). Measured no effect on real pages - see below
 - `WAIT_AFTER_LAST_REQUEST`: Milliseconds to wait after the last network request before capturing (upstream default: `500`; `compose.yml` sets `300`)
 - `PAGE_DONE_CHECK_INTERVAL`: Page-done polling interval in milliseconds (upstream default: `500`; `compose.yml` sets `100`)
@@ -183,6 +184,17 @@ docker compose logs prerender --since 3m --no-log-prefix \
 
 Feed those hosts to `BLOCK_HOSTS`, which maps them to `127.0.0.1` inside Chrome
 so the connection is refused at once. None of it is content a crawler wants.
+
+**Until they are blocked, a timed-out render is worse than a slow one.** It
+returns whatever the page had reached - which can be a shell, or HTML caught
+mid-write with a truncated attribute - and with the default status of `200` that
+gets cached for `PAGE_TTL` and served to every crawler after it. `compose.yml`
+sets `TIMEOUT_STATUS_CODE=503` so the partial capture is discarded instead:
+
+| | Timed-out render returns | Cached? |
+|---|---|---|
+| Default | `200` with partial HTML | yes, for `PAGE_TTL` |
+| `TIMEOUT_STATUS_CODE=503` | `503` | no - `503` is not a cacheable status |
 
 Measured against a page holding one script from a host that accepts the
 connection and never answers:
