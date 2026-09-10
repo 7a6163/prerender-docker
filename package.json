@@ -5,22 +5,15 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "mocha test/**/*.test.js --timeout 10000",
-    "test:unit": "mocha test/unit/**/*.test.js",
-    "test:integration": "mocha test/integration/**/*.test.js --timeout 30000",
-    "test:watch": "mocha test/**/*.test.js --watch"
+    "test": "node --test 'test/**/*.test.js'",
+    "test:unit": "node --test 'test/unit/**/*.test.js'",
+    "test:integration": "node --test 'test/integration/**/*.test.js'",
+    "test:watch": "node --test --watch 'test/**/*.test.js'"
   },
   "dependencies": {
     "ioredis": "^5.3.2",
     "prerender": "5.21.6",
     "prerender-redis-cache-ng": "^1.0.4"
-  },
-  "devDependencies": {
-    "autocannon": "^7.14.0",
-    "axios": "^1.13.2",
-    "chai": "^4.5.0",
-    "mocha": "^10.8.2",
-    "sinon": "^17.0.1"
   },
   "overrides": {
     "ws": "^7.5.13",

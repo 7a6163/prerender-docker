@@ -1,71 +1,63 @@
-const axios = require('axios');
-const { expect } = require('chai');
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
 
-describe('Request Deduplication', function() {
-    this.timeout(30000);
+const baseURL = process.env.PRERENDER_URL || 'http://localhost:3000';
 
-    const baseURL = process.env.PRERENDER_URL || 'http://localhost:3000';
+const render = async (url) => {
+    const res = await fetch(`${baseURL}/render?url=${url}`);
+    return { status: res.status, body: await res.text(), headers: res.headers };
+};
 
-    it('should serve the waiting request from the first render, not a second one', async () => {
+describe('Request Deduplication', () => {
+    it('should serve the waiting request from the first render, not a second one', { timeout: 30000 }, async () => {
         // Use unique URL with timestamp to avoid cache
-        const timestamp = Date.now();
-        const testUrl = `http://httpbin.org/delay/1?test=${timestamp}`;
-        const url = `${baseURL}/render?url=${testUrl}`;
+        const testUrl = `http://httpbin.org/delay/1?test=${Date.now()}`;
 
         // Start first request (don't wait)
-        const promise1 = axios.get(url).catch(err => err.response);
+        const first = render(testUrl);
 
         // Wait to ensure first request has acquired the lock
         await new Promise(resolve => setTimeout(resolve, 500));
 
         // Second concurrent request should wait for the first render and get its
         // cached output - not a 429, which crawlers treat as a reason to back off.
-        const response2 = await axios.get(url).catch(err => err.response);
-        const response1 = await promise1;
+        const second = await render(testUrl);
+        const response1 = await first;
 
-        expect(response1?.status).to.equal(200);
-        expect(response2.status).to.equal(200);
-        expect(response2.data).to.equal(response1.data);
+        assert.equal(response1.status, 200);
+        assert.equal(second.status, 200);
+        assert.equal(second.body, response1.body);
     });
 
-    it('should allow concurrent requests for different URLs', async () => {
-        const url1 = `${baseURL}/render?url=http://example.com/`;
-        const url2 = `${baseURL}/render?url=http://example.org/`;
-
+    it('should allow concurrent requests for different URLs', { timeout: 30000 }, async () => {
         const [response1, response2] = await Promise.all([
-            axios.get(url1).catch(err => err.response),
-            axios.get(url2).catch(err => err.response)
+            render('http://example.com/'),
+            render('http://example.org/')
         ]);
 
-        expect(response1.status).to.equal(200);
-        expect(response2.status).to.equal(200);
+        assert.equal(response1.status, 200);
+        assert.equal(response2.status, 200);
     });
 
-    it('should serve from cache after first render', async () => {
-        const testUrl = `http://example.com/`;
-        const url = `${baseURL}/render?url=${testUrl}`;
+    it('should serve from cache after first render', { timeout: 30000 }, async () => {
+        const testUrl = `http://example.com/?cache=${Date.now()}`;
 
-        // First request (may hit cache if already rendered before)
         const start1 = Date.now();
-        const response1 = await axios.get(url).catch(err => err.response);
+        const response1 = await render(testUrl);
         const duration1 = Date.now() - start1;
 
-        expect(response1.status).to.equal(200);
+        assert.equal(response1.status, 200);
 
-        // Wait a moment
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Second request (should definitely hit cache)
         const start2 = Date.now();
-        const response2 = await axios.get(url).catch(err => err.response);
+        const response2 = await render(testUrl);
         const duration2 = Date.now() - start2;
 
-        expect(response2.status).to.equal(200);
+        assert.equal(response2.status, 200);
+        assert.equal(response2.body, response1.body);
 
-        // Both requests should work (cache test is informational)
-        console.log(`First: ${duration1}ms, Second: ${duration2}ms, Speedup: ${(duration1/duration2).toFixed(2)}x`);
-
-        // Second request should complete (no assertion on speed due to cache warmup)
-        expect(duration2).to.be.greaterThan(0);
+        // A cache hit is orders of magnitude faster than a render, so this is a
+        // real assertion rather than an informational log.
+        console.log(`render: ${duration1}ms, cache hit: ${duration2}ms`);
+        assert.ok(duration2 < duration1 / 5, `cache hit (${duration2}ms) should be much faster than render (${duration1}ms)`);
     });
 });

@@ -1,9 +1,8 @@
+const { describe, it, before, after, afterEach } = require('node:test');
+const assert = require('node:assert/strict');
 const Redis = require('ioredis');
-const { expect } = require('chai');
 
-describe('Redis Lock Mechanism', function() {
-    this.timeout(10000);
-
+describe('Redis Lock Mechanism', () => {
     let redis;
 
     before(() => {
@@ -23,55 +22,40 @@ describe('Redis Lock Mechanism', function() {
     });
 
     it('should acquire lock for unique key', async () => {
-        const lockKey = 'prerender:lock:test-unique';
-        const result = await redis.set(lockKey, Date.now(), 'EX', 30, 'NX');
+        const result = await redis.set('prerender:lock:test-unique', Date.now(), 'EX', 30, 'NX');
 
-        expect(result).to.equal('OK');
+        assert.equal(result, 'OK');
     });
 
     it('should fail to acquire lock if already held', async () => {
         const lockKey = 'prerender:lock:test-duplicate';
 
-        // First acquisition
-        const first = await redis.set(lockKey, Date.now(), 'EX', 30, 'NX');
-        expect(first).to.equal('OK');
+        assert.equal(await redis.set(lockKey, Date.now(), 'EX', 30, 'NX'), 'OK');
 
         // Second acquisition should fail
-        const second = await redis.set(lockKey, Date.now(), 'EX', 30, 'NX');
-        expect(second).to.be.null;
+        assert.equal(await redis.set(lockKey, Date.now(), 'EX', 30, 'NX'), null);
     });
 
     it('should release lock when deleted', async () => {
         const lockKey = 'prerender:lock:test-release';
 
-        // Acquire lock
         await redis.set(lockKey, Date.now(), 'EX', 30, 'NX');
-
-        // Release lock
         await redis.del(lockKey);
 
         // Should be able to acquire again
-        const reacquire = await redis.set(lockKey, Date.now(), 'EX', 30, 'NX');
-        expect(reacquire).to.equal('OK');
+        assert.equal(await redis.set(lockKey, Date.now(), 'EX', 30, 'NX'), 'OK');
     });
 
-    it('should expire lock after TTL', async function() {
-        this.timeout(5000);
-
+    it('should expire lock after TTL', { timeout: 10000 }, async () => {
         const lockKey = 'prerender:lock:test-expire';
 
         // Acquire lock with 2 second TTL
         await redis.set(lockKey, Date.now(), 'EX', 2, 'NX');
+        assert.equal(await redis.set(lockKey, Date.now(), 'EX', 2, 'NX'), null);
 
-        // Should be locked
-        const immediate = await redis.set(lockKey, Date.now(), 'EX', 2, 'NX');
-        expect(immediate).to.be.null;
-
-        // Wait for expiration
         await new Promise(resolve => setTimeout(resolve, 2500));
 
         // Should be able to acquire after expiration
-        const afterExpiry = await redis.set(lockKey, Date.now(), 'EX', 30, 'NX');
-        expect(afterExpiry).to.equal('OK');
+        assert.equal(await redis.set(lockKey, Date.now(), 'EX', 30, 'NX'), 'OK');
     });
 });

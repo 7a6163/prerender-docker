@@ -12,22 +12,27 @@ test/
     └── deduplication.test.js
 ```
 
+Tests use Node's built-in test runner (`node:test` + `node:assert`) and
+`fetch`, so there are no test dependencies to install - `npm install` alone is
+enough. Requires Node 22+; the image and CI run 26.
+
 ## Prerequisites
 
-1. Install test dependencies:
+1. Start the services:
 ```bash
-npm install --save-dev mocha chai axios ioredis autocannon sinon
+docker compose up -d
 ```
 
-2. Start the services:
+2. Wait for services to be ready:
 ```bash
-docker-compose up -d
-```
-
-3. Wait for services to be ready:
-```bash
-docker-compose logs -f prerender
+docker compose logs -f prerender
 # Wait until you see "Started Chrome"
+```
+
+Unit tests talk to Redis directly, but `compose.yml` does not publish valkey's
+port. Either publish it, or point the tests at another Redis:
+```bash
+REDIS_URL=redis://localhost:6380 npm run test:unit
 ```
 
 ## Running Tests
@@ -71,10 +76,9 @@ PRERENDER_URL=http://10.240.0.11:3000 npm test
 - ✅ Concurrent lock attempts
 
 ### Integration Tests
-- ✅ Request deduplication (429 responses)
+- ✅ Duplicate concurrent requests wait for the in-flight render and get its output
 - ✅ Concurrent requests for different URLs
-- ✅ Cache hit performance
-- ✅ Retry-After header validation
+- ✅ Cache hits are much faster than renders, and return the same body
 
 ## Writing New Tests
 
@@ -82,14 +86,14 @@ PRERENDER_URL=http://10.240.0.11:3000 npm test
    - `test/unit/` - Test individual functions/modules
    - `test/integration/` - Test complete workflows
 
-2. Use Mocha + Chai:
+2. Use `node:test` + `node:assert`:
 ```javascript
-const { expect } = require('chai');
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
 
 describe('Feature Name', () => {
     it('should do something', async () => {
-        const result = await someFunction();
-        expect(result).to.equal(expectedValue);
+        assert.equal(await someFunction(), expectedValue);
     });
 });
 ```
@@ -114,26 +118,26 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-      - run: docker-compose up -d
+          node-version: '26'
+      - run: docker compose up -d
       - run: sleep 5
-      - run: npm install --save-dev mocha chai axios ioredis
+      - run: npm install
       - run: npm test
 ```
 
 ## Troubleshooting
 
 ### Tests failing with "Connection refused"
-- Ensure services are running: `docker-compose ps`
-- Check logs: `docker-compose logs prerender`
+- Ensure services are running: `docker compose ps`
+- Check logs: `docker compose logs prerender`
 
 ### Tests timeout
-- Increase timeout in test: `this.timeout(30000)`
+- Increase the per-test timeout: `it('name', { timeout: 30000 }, async () => {})`
 - Check service health: `curl http://localhost:3000/render?url=http://example.com`
 
 ### Redis connection errors
-- Verify Redis is running: `docker-compose ps valkey`
+- Verify Redis is running: `docker compose ps valkey`
 - Check Redis URL: `echo $REDIS_URL`
