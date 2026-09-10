@@ -3,9 +3,10 @@ FROM node:26-alpine
 RUN apk add --no-cache tini chromium
 
 WORKDIR "/app"
-COPY ./package.json .
-COPY ./server.js .
-RUN npm install --no-package-lock
+# Dependencies first: editing server.js must not invalidate the install layer
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY server.js .
 
 EXPOSE 3000
 
