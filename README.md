@@ -190,7 +190,39 @@ hostnames, though a pasted URL is tolerated.
 Feed those hosts to `BLOCK_HOSTS`, which maps them to `127.0.0.1` inside Chrome
 so the connection is refused at once. None of it is content a crawler wants.
 
-**Until they are blocked, a timed-out render is worse than a slow one.** It
+Some of them cannot be blocked. A long-poll to *your own* origin looks exactly
+like the page's real data requests, and blocking that host would block the page
+itself. For those, tell the renderer when the page is done instead of letting it
+guess: upstream checks `window.prerenderReady`, and once the page has set it to
+`true` the capture happens after `prerenderReadyDelay` (1s) **without waiting
+for the network to be idle** (`prerender/lib/browsers/chrome.js`, the
+`shouldWaitForPrerenderReady` branch).
+
+Two lines in the page:
+
+```html
+<!-- in index.html, before the app boots: makes the renderer wait for the signal -->
+<script>window.prerenderReady = false;</script>
+```
+```js
+// in the app, once the content and the meta tags are in place
+window.prerenderReady = true;
+```
+
+Measured on a page holding a request that never finishes:
+
+| | Render time |
+|---|---|
+| No signal | 15.16s - the whole `PAGE_LOAD_TIMEOUT` |
+| `window.prerenderReady` | **1.60s** |
+
+It also fixes half-written captures at the root: the page picks the moment, so
+the snapshot cannot land between the app setting `og:title` and `og:image`. Note
+that a page which sets the flag to `false` and never to `true` - a JavaScript
+error on the way - waits out `PAGE_LOAD_TIMEOUT` and then returns `503`; the
+cool-down keeps that from being retried on every hit.
+
+**Until a page finishes loading, a timed-out render is worse than a slow one.** It
 returns whatever the page had reached - which can be a shell, or HTML caught
 mid-write with a truncated attribute - and with the default status of `200` that
 gets cached for `PAGE_TTL` and served to every crawler after it. `compose.yml`
