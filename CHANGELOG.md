@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `nginx.conf.example`: a working crawler-detecting front end, with the user-agent list generated from `prerender-node` 3.8.3 (107 crawlers, including GPTBot/ClaudeBot/PerplexityBot), asset paths excluded from rendering, the render-loop guard, Docker-aware upstream resolution and timeouts matched to `MAX_WAIT_MS` + `PAGE_LOAD_TIMEOUT`
 - Request deduplication with Redis-based distributed locking
 - Concurrent rendering limit with configurable `MAX_CONCURRENT_RENDERS`
 - Environment variable configuration support
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Duplicate concurrent requests now wait for the in-flight render and are served from the cache (200) instead of receiving 429 immediately; 429 is now only returned if that render fails or exceeds `LOCK_TTL`
 - Removed `package.test.json` and the `test:load` script (duplicate/dead)
+- Removed the `forwardHeaders: true` option, which prerender 5.21.6 does not read (the crawler's headers were never reaching the rendered page)
 - Pinned patched transitive dependencies via `overrides` (`ws` 7.5.13, `path-to-regexp` 0.1.13, `qs` 6.16.0, `body-parser` 1.20.8), clearing every production `npm audit` finding except a non-exploitable `uuid` advisory
 - Upgraded to Node.js 26-alpine base image
 - Image installs from `package-lock.json` with `npm ci --omit=dev` instead of an unpinned `npm install --no-package-lock`, and copies dependency manifests before `server.js` so editing the server no longer invalidates the install layer

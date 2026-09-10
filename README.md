@@ -161,10 +161,34 @@ Passing `chromeFlags` replaces upstream's default list entirely, so
 ## Architecture
 
 ```
-Web Crawler → Prerender Service (Port 3000) → Chromium
-                       ↓
-                  Redis Cache (Valkey)
+Web Crawler → nginx (detects crawlers) → Prerender Service (Port 3000) → Chromium
+                                                   ↓
+                                            Redis Cache (Valkey)
 ```
+
+The service renders whatever URL it is given; deciding *which* requests are
+crawlers and should be rendered belongs to the layer in front of it.
+`nginx.conf.example` is a working front end for that: the crawler list is
+generated from `prerender-node` (the only part of upstream still maintained,
+and the list that keeps up with LLM crawlers such as GPTBot, ClaudeBot and
+PerplexityBot), assets are excluded from rendering, and the timeouts match this
+service's `MAX_WAIT_MS` and `PAGE_LOAD_TIMEOUT`.
+
+Two entries in it are load-bearing:
+
+- `"~*Prerender" 0` must stay first in the user-agent map. This service's own
+  Chromium requests pages as `<chrome ua> Prerender (+https://github.com/prerender/prerender)`,
+  so without it the render fetches the page, nginx sees a crawler again, and the
+  request loops until `MAX_CONCURRENT_RENDERS` is exhausted.
+- The URL is passed in path form (`rewrite .* /$scheme://$host$request_uri?`),
+  not as `/render?url=...`. Building the query form by hand breaks on the first
+  `&` in the original query string.
+
+Verified end to end with nginx in front of this service: a Googlebot,
+ClaudeBot, GPTBot or facebookexternalhit user agent receives JavaScript-rendered
+HTML, a browser user agent receives the raw SPA shell, the service's own user
+agent is not re-rendered, and `data.json` is served by nginx without reaching
+the renderer.
 
 ## Performance
 

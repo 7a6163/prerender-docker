@@ -22,9 +22,10 @@ if (DISABLE_IMAGES) {
     console.log('[Prerender Config] Images disabled for faster rendering');
 }
 
+// forwardHeaders is deliberately absent: prerender 5.21.6 never reads it, so
+// passing it only suggests the crawler's headers reach the page. They do not.
 const server = prerender({
     chromeFlags,
-    forwardHeaders: true,
     chromeLocation: '/usr/bin/chromium-browser'
 });
 

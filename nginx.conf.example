@@ -1,0 +1,218 @@
+# Example nginx front end for this prerender service.
+#
+# Adapted from prerender/prerender-nginx, with the SaaS token dropped and the
+# crawler list taken from prerender-node 3.8.3 (the client middleware is the
+# only part of upstream still maintained, and its list is the one that keeps up
+# with LLM crawlers). Regenerate it from that package when crawlers change.
+#
+# Change: server_name, root, and the upstream host if the service is not
+# reachable as "prerender" on a shared Docker network.
+
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    sendfile          on;
+    keepalive_timeout 65;
+
+    # Is this request from a crawler that cannot run JavaScript?
+    #
+    # The "Prerender" entry MUST stay first and MUST stay 0: this service's own
+    # Chromium requests pages with
+    #   "<chrome ua> Prerender (+https://github.com/prerender/prerender)"
+    # (see prerender/lib/browsers/chrome.js). Without it, the render fetches the
+    # page, nginx sees a crawler again, and the request loops back into the
+    # service until MAX_CONCURRENT_RENDERS is exhausted and everything 503s.
+    map $http_user_agent $prerender_ua {
+        default        0;
+        "~*Prerender"  0;
+
+        "~*googlebot"                                     1;
+        "~*adsbot-google"                                 1;
+        "~*apis-google"                                   1;
+        "~*mediapartners-google"                          1;
+        "~*google-safety"                                 1;
+        "~*feedfetcher-google"                            1;
+        "~*googleproducer"                                1;
+        "~*google-site-verification"                      1;
+        "~*Google-InspectionTool"                         1;
+        "~*Yahoo! Slurp"                                  1;
+        "~*bingbot"                                       1;
+        "~*yandex"                                        1;
+        "~*yandexbot"                                     1;
+        "~*baiduspider"                                   1;
+        "~*naver"                                         1;
+        "~*seznambot"                                     1;
+        "~*sznprohlizec"                                  1;
+        "~*qwantbot"                                      1;
+        "~*ecosia"                                        1;
+        "~*facebookexternalhit"                           1;
+        "~*twitterbot"                                    1;
+        "~*rogerbot"                                      1;
+        "~*linkedinbot"                                   1;
+        "~*embedly"                                       1;
+        "~*quora link preview"                            1;
+        "~*showyoubot"                                    1;
+        "~*outbrain"                                      1;
+        "~*pinterest/0\."                                 1;
+        "~*developers\.google\.com/\+/web/snippet"        1;
+        "~*slackbot"                                      1;
+        "~*vkShare"                                       1;
+        "~*W3C_Validator"                                 1;
+        "~*redditbot"                                     1;
+        "~*Applebot"                                      1;
+        "~*WhatsApp"                                      1;
+        "~*flipboard"                                     1;
+        "~*tumblr"                                        1;
+        "~*bitlybot"                                      1;
+        "~*SkypeUriPreview"                               1;
+        "~*nuzzel"                                        1;
+        "~*Discordbot"                                    1;
+        "~*Google Page Speed"                             1;
+        "~*Qwantify"                                      1;
+        "~*pinterestbot"                                  1;
+        "~*Bitrix link preview"                           1;
+        "~*XING-contenttabreceiver"                       1;
+        "~*Chrome-Lighthouse"                             1;
+        "~*TelegramBot"                                   1;
+        "~*screaming frog SEO spider"                     1;
+        "~*AhrefsBot"                                     1;
+        "~*AhrefsSiteAudit"                               1;
+        "~*Iframely"                                      1;
+        "~*OpenAI/ChatGPT"                                1;
+        "~*ChatGPT-User"                                  1;
+        "~*GPTBot"                                        1;
+        "~*ChatGPT-User/1\.0"                             1;
+        "~*oai-searchbot"                                 1;
+        "~*claudebot"                                     1;
+        "~*claude-web"                                    1;
+        "~*amazonbot"                                     1;
+        "~*Anthropic/Claude"                              1;
+        "~*anthropic-ai"                                  1;
+        "~*Google-Extended"                               1;
+        "~*GoogleOther"                                   1;
+        "~*Microsoft/Bing AI"                             1;
+        "~*BingBot/AI"                                    1;
+        "~*BingPreview"                                   1;
+        "~*Perplexitybot"                                 1;
+        "~*PerplexityBot/1\.0"                            1;
+        "~*perplexity-user"                               1;
+        "~*youbot"                                        1;
+        "~*Cohere"                                        1;
+        "~*Cohere-ai"                                     1;
+        "~*cohere-crawler"                                1;
+        "~*ByteDance/TikTok"                              1;
+        "~*Bytespider"                                    1;
+        "~*BytespiderBot"                                 1;
+        "~*Baiduspider-render"                            1;
+        "~*Baiduspider-AI"                                1;
+        "~*YourBot"                                       1;
+        "~*You-bot"                                       1;
+        "~*mistralai-user"                                1;
+        "~*NeevaBot"                                      1;
+        "~*Hugging-Face-AI"                               1;
+        "~*HuggingFaceBot"                                1;
+        "~*LinkedInBot/AI"                                1;
+        "~*facebookexternalhit/AI"                        1;
+        "~*meta-externalagent"                            1;
+        "~*facebookcatalog"                               1;
+        "~*FacebookBot"                                   1;
+        "~*CCBot"                                         1;
+        "~*AIResearchBot"                                 1;
+        "~*research-crawler"                              1;
+        "~*Diffbot"                                       1;
+        "~*ScaleAI"                                       1;
+        "~*scale-crawler"                                 1;
+        "~*semrushbot"                                    1;
+        "~*screaming-frog"                                1;
+        "~*oncrawlbot"                                    1;
+        "~*botifybot"                                     1;
+        "~*deepcrawl"                                     1;
+        "~*lumar"                                         1;
+        "~*dotbot"                                        1;
+        "~*duckduckbot"                                   1;
+        "~*duckassistbot"                                 1;
+        "~*instagram"                                     1;
+        "~*tiktokspider"                                  1;
+    }
+
+    # Legacy hashbang crawling
+    map $args $prerender_args {
+        default                     $prerender_ua;
+        "~(^|&)_escaped_fragment_=" 1;
+    }
+
+    # Second loop guard, for front ends that mark their own prerender requests
+    map $http_x_prerender $prerender_marked {
+        default $prerender_args;
+        "1"     0;
+    }
+
+    # Never render assets: a crawler fetching main.js must not cost a Chromium
+    # tab (~90MB) and a render slot
+    map $uri $prerender {
+        default $prerender_marked;
+        "~*\.(js|mjs|css|json|xml|txt|map|ico|rss|atom|webmanifest|png|jpe?g|gif|svg|webp|avif|bmp|tiff?|pdf|zip|rar|7z|gz|mp[34]|m4[av]|wav|mov|avi|wmv|mpe?g|flv|webm|woff2?|ttf|otf|eot)$" 0;
+    }
+
+    server {
+        listen      80;
+        server_name example.com;
+        root        /usr/share/nginx/html;
+
+        location / {
+            if ($prerender = 1) {
+                rewrite (.*) /prerenderio last;
+            }
+            try_files $uri /index.html;
+        }
+
+        location /prerenderio {
+            internal;
+
+            if ($prerender = 0) {
+                return 404;
+            }
+
+            # Resolve the upstream at request time. With a literal proxy_pass,
+            # nginx resolves the container name once at startup and keeps 502ing
+            # after the service container is recreated with a new IP.
+            resolver 127.0.0.11 valid=10s ipv6=off;
+            set $prerender_upstream "http://prerender:3000";
+
+            # A duplicate request waits up to MAX_WAIT_MS (8s) for the render it
+            # is deduplicated against, and a render itself can take
+            # PAGE_LOAD_TIMEOUT (20s). Anything below ~30s here returns 504
+            # while the service is still working correctly.
+            proxy_connect_timeout 5s;
+            proxy_read_timeout    30s;
+            proxy_send_timeout    30s;
+
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            # 429 (waited out an in-flight render) and 503 (over
+            # MAX_CONCURRENT_RENDERS) are deliberately passed through with their
+            # Retry-After headers. Do NOT rewrite them into a 200 serving
+            # index.html: that hands crawlers an empty SPA shell to index, while
+            # a 429/503 just tells them to come back.
+            proxy_intercept_errors off;
+
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "private,max-age=600,must-revalidate";
+
+            proxy_pass $prerender_upstream;
+
+            # Path form, not /render?url=... - building that by hand breaks on
+            # the first "&" in the original query string. The service accepts
+            # both (prerender/lib/util.js getOptions).
+            rewrite .* /$scheme://$host$request_uri? break;
+        }
+    }
+}
