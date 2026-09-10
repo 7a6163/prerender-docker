@@ -64,6 +64,7 @@ curl http://localhost:3000/render?url=http://example.com
 - `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders (default: `30`; keep it above `PAGE_LOAD_TIMEOUT`, which defaults to 20s)
 - `MAX_WAIT_MS`: How long a duplicate request waits for the in-flight render before returning `429` (default: `8000`)
 - `ALLOWED_DOMAINS`: Comma-separated hostnames this service may render; everything else gets `404` (default: unset, meaning any URL is rendered - see Security)
+- `STRIP_QUERY_PARAMS`: Query parameters removed before the URL becomes a lock, a cache key and a render (default: a built-in tracking-parameter list; set to empty to strip nothing)
 - `BROWSER_FORCE_RESTART_PERIOD`: How often Chrome is recycled regardless of in-flight requests, in milliseconds (upstream default: `3600000`)
 - `DISABLE_IMAGES`: Disable image loading (default: `false`). Measured no effect on real pages - see below
 - `WAIT_AFTER_LAST_REQUEST`: Milliseconds to wait after the last network request before capturing (upstream default: `500`; `compose.yml` sets `300`)
@@ -85,6 +86,21 @@ settings keep that closed:
 Note that `prerender.blacklist()` - which this service used on its own before -
 does nothing at all unless `BLACKLISTED_DOMAINS` is set, so it was never a
 restriction.
+
+### URL Canonicalisation
+
+The lock, the cache entry and the render are all per-URL, so the same page
+arriving with different click ids is that many renders and that many cache
+entries - one shared link on Facebook or LINE is enough to start it. Tracking
+parameters are stripped before any of that: `?id=7&fbclid=abc&utm_source=fb`
+becomes `?id=7`, and the two URLs share one render and one cache entry.
+
+The default list covers `utm_*`, `gclid`/`gbraid`/`wbraid`, `fbclid`, `igshid`,
+`ttclid`, `twclid`, `msclkid`, `yclid`, `li_fat_id`, `mc_cid`/`mc_eid`,
+`mkt_tok`, `_hsenc` and similar. Override it with `STRIP_QUERY_PARAMS`, or set
+that to empty to disable stripping. Parameter names are matched
+case-insensitively; parameter order and fragments (including `#!` routes) are
+preserved.
 
 ### Concurrency Control
 

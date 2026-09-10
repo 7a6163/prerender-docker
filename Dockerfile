@@ -6,7 +6,7 @@ WORKDIR "/app"
 # Dependencies first: editing server.js must not invalidate the install layer
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY server.js .
+COPY server.js url-normalize.js ./
 
 EXPOSE 3000
 

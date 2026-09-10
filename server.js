@@ -3,6 +3,7 @@
 const prerender = require('prerender');
 const redisCache = require('prerender-redis-cache-ng');
 const Redis = require('ioredis');
+const { strippedParams, stripQueryParams } = require('./url-normalize');
 
 // Build Chrome flags based on configuration
 const chromeFlags = [
@@ -63,6 +64,25 @@ if (process.env.ALLOWED_DOMAINS) {
 } else {
     console.warn('[Prerender Config] ALLOWED_DOMAINS is unset: this service will render ANY URL it is given. Set it, and do not expose port 3000 beyond your own front end.');
 }
+
+// Canonicalise the URL before anything downstream derives a key from it: the
+// lock, the cache entry and the render are all per-URL, so one page arriving
+// with a dozen different click ids would otherwise be a dozen renders.
+const STRIPPED_PARAMS = strippedParams(process.env.STRIP_QUERY_PARAMS);
+console.log(`[Prerender Config] STRIP_QUERY_PARAMS: ${STRIPPED_PARAMS.length} parameters`);
+
+server.use({
+    requestReceived: (req, res, next) => {
+        const canonical = stripQueryParams(req.prerender.url, STRIPPED_PARAMS);
+
+        if (canonical !== req.prerender.url) {
+            console.log(`[Prerender] Stripped tracking parameters: ${req.prerender.url} -> ${canonical}`);
+            req.prerender.url = canonical;
+        }
+
+        next();
+    }
+});
 
 // Request deduplication middleware
 server.use({

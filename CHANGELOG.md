@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `STRIP_QUERY_PARAMS`: tracking parameters are removed from the URL before it becomes a lock key, a cache key and a render. The same page arriving with different click ids was that many renders and that many cache entries, and one shared link on Facebook or LINE is enough to start it. Defaults to a built-in list (`utm_*`, `gclid`, `fbclid`, `igshid`, `ttclid`, `msclkid`, `mc_cid`, ...); set it to empty to disable. Names match case-insensitively, and parameter order and fragments (including `#!` routes) are preserved
+
+### Changed
+- `prerender-redis-cache-ng` moved to 1.1.1 in the lockfile (documentation-only release; the library code is byte-identical to 1.1.0)
+
 ## [5.23.0] - 2026-09-10
 
 ### Added
