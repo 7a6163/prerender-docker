@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The cache plugin is now registered last, so cached entries are what actually gets sent. It sat before `removeScriptTags` and `httpHeaders`, whose `pageLoaded` hooks run in registration order, so entries were stored with the script tags still in them and with the status code read from the response rather than from `<meta name="prerender-status-code">`. A crawler got script-free HTML from the render that filled the cache and script-laden HTML from every hit after it — measured on a real page: 0 script tags versus 38, and 77KB versus 126KB
+
 ### Added
 - `STRIP_QUERY_PARAMS`: tracking parameters are removed from the URL before it becomes a lock key, a cache key and a render. The same page arriving with different click ids was that many renders and that many cache entries, and one shared link on Facebook or LINE is enough to start it. Defaults to a built-in list (`utm_*`, `gclid`, `fbclid`, `igshid`, `ttclid`, `msclkid`, `mc_cid`, ...); set it to empty to disable. Names match case-insensitively, and parameter order and fragments (including `#!` routes) are preserved
 

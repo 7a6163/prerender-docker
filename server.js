@@ -195,8 +195,6 @@ server.use({
     }
 });
 
-server.use(redisCache);
-
 // Sends X-Prerender: 1 with the page requests this service makes, which is the
 // second loop guard in nginx.conf.example - without it that map never fires and
 // loop protection rests entirely on the user agent carrying "Prerender".
@@ -210,5 +208,15 @@ server.use(prerender.removeScriptTags());
 // the dedup wait loop keep that set non-empty, so on a busy service Chrome
 // would never be recycled - it would just grow into mem_limit.
 server.use(prerender.browserForceRestart());
+
+// Registered last on purpose. pageLoaded hooks fire in registration order, so
+// the cache has to be the final one or it stores something other than what
+// gets sent: with it earlier, entries kept the script tags removeScriptTags
+// had yet to strip and the status code httpHeaders had yet to read from
+// <meta name="prerender-status-code">. A cache hit then served different HTML
+// than the render that filled it. Its requestReceived (the cache read) still
+// runs before any rendering starts, because the render only begins once every
+// requestReceived hook has finished.
+server.use(redisCache);
 
 server.start();
