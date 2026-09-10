@@ -4,7 +4,7 @@ This repository contains the configuration and setup to containerize the Prerend
 
 ## Features
 
-- 🚀 **High Performance**: Chrome 142 with optimized flags for Docker
+- 🚀 **High Performance**: Chrome 152 with optimized flags for Docker
 - 💾 **Redis Cache**: Persistent caching with Valkey/Redis (cache hits are ~1000x faster than a render)
 - 🔄 **Protocol-Agnostic**: HTTP and HTTPS URLs share the same cache
 - 🛡️ **Certificate Handling**: Configured to handle SSL certificate issues
@@ -142,7 +142,7 @@ The service uses **prerender-redis-cache-ng** for caching:
 
 ### Chrome Flags
 
-Configured with flags optimized for Docker and Chrome 142:
+Configured with flags optimized for Docker and Chrome 152:
 - `--no-sandbox`: Required for Docker
 - `--disable-dev-shm-usage`: Avoid Docker's small /dev/shm
 - `--disable-features=AutoupgradeMixedContent,HttpsUpgrades`: Prevent automatic HTTPS upgrade
@@ -170,8 +170,8 @@ Web Crawler → Prerender Service (Port 3000) → Chromium
 The `compose.yml` includes:
 
 1. **prerender**: The main Prerender service
-   - Node.js 24-alpine
-   - Chromium 142
+   - Node.js 26-alpine
+   - Chromium 152
    - Port: 3000
 
 2. **valkey**: Redis-compatible cache
