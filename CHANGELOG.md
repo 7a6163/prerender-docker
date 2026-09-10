@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.23.0] - 2026-09-10
+
 ### Added
 - `ALLOWED_DOMAINS`: comma-separated hostnames this service may render; everything else gets a `404` before any lock, render slot or cache lookup is spent. Unset keeps the previous permissive behaviour, because upstream's whitelist plugin `404`s everything when the list is empty - which would take a service down rather than secure it. Startup now warns when it is unset
 - `prerender.sendPrerenderHeader()`: sends `X-Prerender: 1` with the page requests this service makes, which is the second loop guard in `nginx.conf.example` (without it that map never fires and loop protection rests entirely on the user agent carrying "Prerender")
