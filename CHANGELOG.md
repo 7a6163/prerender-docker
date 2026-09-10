@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.25.0] - 2026-09-11
+
 ### Added
 - `TIMEOUT_STATUS_CODE=503` in `compose.yml`: a render that hits `PAGE_LOAD_TIMEOUT` returns whatever the page had reached, and with upstream's default status of `200` that partial capture is cached for `PAGE_TTL` and served to every crawler after it - seen in production as an empty `og:title` and an `og:image` truncated to `https:`, from HTML serialised while the page was still writing it. `503` is not a cacheable status, so the capture is discarded and the crawler is told to come back
 - `TIMEOUT_COOLDOWN` (default 60s): a URL whose render just timed out is refused with `503` and `Retry-After` instead of being rendered again. `TIMEOUT_STATUS_CODE=503` stopped the partial capture being cached, but that also removed the only thing throttling the next attempt - every crawler hit would have taken a render slot for the whole `PAGE_LOAD_TIMEOUT` and starved the URLs that render fine
