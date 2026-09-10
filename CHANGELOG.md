@@ -7,24 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- Upgraded `prerender-redis-cache-ng` to 1.2.0, which gzips cache entries. On a real page from the site this serves, one entry went from 163,896 bytes of Redis memory to 20,560 - and to 14,416 once the plugin ordering fix below stopped the script tags being stored too. Reads detect gzip by its magic bytes, so entries written by earlier versions stay readable and age out through their TTL. `PAGE_COMPRESS=0` stores plain JSON
-
-### Fixed
-- The cache plugin is now registered last, so cached entries are what actually gets sent. It sat before `removeScriptTags` and `httpHeaders`, whose `pageLoaded` hooks run in registration order, so entries were stored with the script tags still in them and with the status code read from the response rather than from `<meta name="prerender-status-code">`. A crawler got script-free HTML from the render that filled the cache and script-laden HTML from every hit after it — measured on a real page: 0 script tags versus 38, and 77KB versus 126KB
-
-### Added
-- `STRIP_QUERY_PARAMS`: tracking parameters are removed from the URL before it becomes a lock key, a cache key and a render. The same page arriving with different click ids was that many renders and that many cache entries, and one shared link on Facebook or LINE is enough to start it. Defaults to a built-in list (`utm_*`, `gclid`, `fbclid`, `igshid`, `ttclid`, `msclkid`, `mc_cid`, ...); set it to empty to disable. Names match case-insensitively, and parameter order and fragments (including `#!` routes) are preserved
-
-### Changed
-- `prerender-redis-cache-ng` moved to 1.1.1 in the lockfile (documentation-only release; the library code is byte-identical to 1.1.0)
-
 ## [5.23.0] - 2026-09-10
 
 ### Added
 - `ALLOWED_DOMAINS`: comma-separated hostnames this service may render; everything else gets a `404` before any lock, render slot or cache lookup is spent. Unset keeps the previous permissive behaviour, because upstream's whitelist plugin `404`s everything when the list is empty - which would take a service down rather than secure it. Startup now warns when it is unset
 - `prerender.sendPrerenderHeader()`: sends `X-Prerender: 1` with the page requests this service makes, which is the second loop guard in `nginx.conf.example` (without it that map never fires and loop protection rests entirely on the user agent carrying "Prerender")
 - `prerender.browserForceRestart()`: recycles Chrome hourly. Upstream's other restart path only fires when no request is in flight, and requests parked in the dedup wait loop keep that set non-empty, so on a busy service Chrome was never recycled and simply grew into `mem_limit`
+- `STRIP_QUERY_PARAMS`: tracking parameters are removed from the URL before it becomes a lock key, a cache key and a render. The same page arriving with different click ids was that many renders and that many cache entries, and one shared link on Facebook or LINE is enough to start it. Defaults to a built-in list (`utm_*`, `gclid`, `fbclid`, `igshid`, `ttclid`, `msclkid`, `mc_cid`, ...); set it to empty to disable. Names match case-insensitively, and parameter order and fragments (including `#!` routes) are preserved
 
 ### Changed
 - Upgraded `ioredis` to 6.0.0, which requires Node 20+ and defaults to RESP3. Every call this service makes was checked against valkey 9.1.0 under RESP3 first and returns exactly what it did under RESP2: `SET NX` gives `"OK"`/`null`, `EXISTS` gives `1`/`0`, `EVAL` gives a number, and `pipeline().exec()` still gives `[[null, value], ...]` - the shape the wait loop destructures
@@ -33,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Valkey runs with `--maxmemory 1gb --maxmemory-policy allkeys-lru` and its own `mem_limit`. Cache entries are whole rendered pages (~2MB for a large article) kept for `PAGE_TTL`, and the default unbounded/`noeviction` pair ends with writes failing, which stops the cache being written at all - the exact state `MAX_WAIT_MS` exists to bound
 - Valkey has a healthcheck and `prerender` waits for it, instead of starting alongside it and serving the first requests through the dedup layer's fail-open path
 - Valkey is started with `valkey-server` rather than the `redis-server` compatibility symlink
+- Upgraded `prerender-redis-cache-ng` to 1.2.0, which gzips cache entries. On a real page from the site this serves, one entry went from 163,896 bytes of Redis memory to 20,560 - and to 14,416 once the plugin ordering fix below stopped the script tags being stored too. Reads detect gzip by its magic bytes, so entries written by earlier versions stay readable and age out through their TTL. `PAGE_COMPRESS=0` stores plain JSON
+
+### Fixed
+- The cache plugin is now registered last, so cached entries are what actually gets sent. It sat before `removeScriptTags` and `httpHeaders`, whose `pageLoaded` hooks run in registration order, so entries were stored with the script tags still in them and with the status code read from the response rather than from `<meta name="prerender-status-code">`. A crawler got script-free HTML from the render that filled the cache and script-laden HTML from every hit after it — measured on a real page: 0 script tags versus 38, and 77KB versus 126KB
 
 ## [5.22.1] - 2026-09-10
 
