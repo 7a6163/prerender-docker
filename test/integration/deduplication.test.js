@@ -6,7 +6,7 @@ describe('Request Deduplication', function() {
 
     const baseURL = process.env.PRERENDER_URL || 'http://localhost:3000';
 
-    it('should return 429 for concurrent duplicate requests', async () => {
+    it('should serve the waiting request from the first render, not a second one', async () => {
         // Use unique URL with timestamp to avoid cache
         const timestamp = Date.now();
         const testUrl = `http://httpbin.org/delay/1?test=${timestamp}`;
@@ -18,27 +18,14 @@ describe('Request Deduplication', function() {
         // Wait to ensure first request has acquired the lock
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Send second concurrent request
-        let secondRequestStatus;
-        let secondResponse;
-        try {
-            secondResponse = await axios.get(url);
-            secondRequestStatus = secondResponse.status;
-        } catch (error) {
-            secondRequestStatus = error.response?.status;
-            if (secondRequestStatus === 429) {
-                expect(error.response.headers['retry-after']).to.equal('5');
-                expect(error.response.data).to.include('Please retry after 5 seconds');
-            }
-        }
-
-        // Should get 429 for concurrent request (or possibly 200 if first completed)
-        console.log(`Second request got: ${secondRequestStatus}`);
-        expect([200, 429]).to.include(secondRequestStatus);
-
-        // Wait for first request to complete
+        // Second concurrent request should wait for the first render and get its
+        // cached output - not a 429, which crawlers treat as a reason to back off.
+        const response2 = await axios.get(url).catch(err => err.response);
         const response1 = await promise1;
-        expect([200, 404]).to.include(response1?.status);
+
+        expect(response1?.status).to.equal(200);
+        expect(response2.status).to.equal(200);
+        expect(response2.data).to.equal(response1.data);
     });
 
     it('should allow concurrent requests for different URLs', async () => {

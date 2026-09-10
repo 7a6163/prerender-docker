@@ -32,8 +32,9 @@ const server = prerender({
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 // Configuration from environment variables
-const MAX_CONCURRENT_RENDERS = parseInt(process.env.MAX_CONCURRENT_RENDERS || '10');
-const LOCK_TTL = parseInt(process.env.LOCK_TTL || '30');
+const MAX_CONCURRENT_RENDERS = parseInt(process.env.MAX_CONCURRENT_RENDERS, 10) || 10;
+const LOCK_TTL = parseInt(process.env.LOCK_TTL, 10) || 30;
+const WAIT_INTERVAL = 200; // how often a waiting request re-checks the cache
 
 // Track current rendering count
 let currentRenders = 0;
@@ -45,8 +46,8 @@ console.log(`[Prerender Config] LOCK_TTL: ${LOCK_TTL}s`);
 server.use({
     requestReceived: async function(req, res, next) {
         const url = req.prerender.url;
-        const lockKey = `prerender:lock:${url}`;
         const cacheKey = url.replace(/^https?:\/\//, ''); // Same format as prerender-redis-cache-ng
+        const lockKey = `prerender:lock:${cacheKey}`; // Same granularity as the cache: http/https share a lock
 
         try {
             // Check if cached (skip lock if cache exists)
@@ -71,20 +72,33 @@ server.use({
                 // Lock acquired successfully, proceed with rendering
                 currentRenders++;
                 console.log(`[Prerender] Lock acquired (${currentRenders}/${MAX_CONCURRENT_RENDERS}), rendering: ${url}`);
-                req.prerender.isLockHolder = true;
+                req.prerender.lockKey = lockKey;
                 next();
-            } else {
-                // Lock already held by another request, return 429
-                console.log(`[Prerender] Already rendering, returning 429: ${url}`);
-
-                // Set Retry-After header (fixed value)
-                res.setHeader('Retry-After', '5');
-
-                // Send 429 response
-                res.send(429, 'Page is being rendered by another request. Please retry after 5 seconds.');
-
-                // Do not call next() - request ends here
+                return;
             }
+
+            // Someone else is already rendering this URL. Wait for their result and
+            // serve it from the cache - crawlers throttle themselves when given a 429.
+            // The cache is written (pageLoaded) before the lock is released (beforeSend),
+            // so a missing lock means that render failed and nothing is coming.
+            // ponytail: 200ms polling, switch to Redis pub/sub if waiters pile up
+            console.log(`[Prerender] Already rendering, waiting for cache: ${url}`);
+
+            for (let waited = 0; waited < LOCK_TTL * 1000; waited += WAIT_INTERVAL) {
+                await new Promise(resolve => setTimeout(resolve, WAIT_INTERVAL));
+
+                if (await redis.exists(cacheKey)) {
+                    console.log(`[Prerender] Cache filled while waiting (${waited + WAIT_INTERVAL}ms): ${url}`);
+                    next(); // Let cache middleware serve it
+                    return;
+                }
+
+                if (!(await redis.exists(lockKey))) break; // Holder gave up without caching
+            }
+
+            console.log(`[Prerender] Gave up waiting for the in-flight render: ${url}`);
+            res.setHeader('Retry-After', '5');
+            res.send(429, 'Page is being rendered by another request. Please retry after 5 seconds.');
         } catch (err) {
             console.error(`[Prerender] Redis error for ${url}:`, err.message);
             // On Redis error, allow the request to proceed
@@ -94,14 +108,15 @@ server.use({
 
     beforeSend: async function(req, res, next) {
         const url = req.prerender.url;
-        const lockKey = `prerender:lock:${url}`;
 
-        // Release lock if this request holds it
-        if (req.prerender.isLockHolder) {
+        // Release lock if this request holds it. Decrement first: a Redis failure here
+        // must not leak the render slot, or the counter drifts up until every
+        // request gets a 503.
+        if (req.prerender.lockKey) {
+            currentRenders--;
+            console.log(`[Prerender] Lock released (${currentRenders}/${MAX_CONCURRENT_RENDERS}): ${url}`);
             try {
-                await redis.del(lockKey);
-                currentRenders--;
-                console.log(`[Prerender] Lock released (${currentRenders}/${MAX_CONCURRENT_RENDERS}): ${url}`);
+                await redis.del(req.prerender.lockKey);
             } catch (err) {
                 console.error(`[Prerender] Failed to release lock for ${url}:`, err.message);
             }

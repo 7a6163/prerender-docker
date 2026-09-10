@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Performance testing script and documentation
 
 ### Changed
+- Duplicate concurrent requests now wait for the in-flight render and are served from the cache (200) instead of receiving 429 immediately; 429 is now only returned if that render fails or exceeds `LOCK_TTL`
+- Removed `package.test.json` and the `test:load` script (duplicate/dead)
 - Upgraded to Node.js 24-alpine base image
 - Enhanced Redis cache with request deduplication
 - Improved error handling with Redis fallback
@@ -27,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rendering speed**: Optional image loading disable for SEO/crawler use cases
 
 ### Fixed
+- Render slot counter no longer leaks when Redis fails during lock release (previously drifted up until every request returned 503)
+- Lock key now uses the protocol-agnostic cache key, so `http://` and `https://` variants of a URL no longer render twice
+- Invalid `MAX_CONCURRENT_RENDERS` / `LOCK_TTL` values now fall back to defaults instead of silently disabling the limit
 - Prevented duplicate rendering of the same URL by concurrent requests
 - Added resource protection against excessive concurrent renders
 - **Cache optimization**: Eliminated unnecessary lock checks for cached content, preventing false 429 responses

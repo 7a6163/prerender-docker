@@ -61,27 +61,28 @@ curl http://localhost:3000/render?url=http://example.com
 - `REDIS_URL`: Redis connection URL (default: `redis://localhost:6379`)
 - `PAGE_TTL`: Cache expiration time in seconds (default: `86400` = 1 day, set to `0` for no expiration)
 - `MAX_CONCURRENT_RENDERS`: Maximum concurrent rendering processes (default: `10`)
-- `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders (default: `30`)
+- `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders, and how long a duplicate request waits before giving up (default: `30`; keep it above `PAGE_LOAD_TIMEOUT`, which defaults to 20s)
 - `DISABLE_IMAGES`: Disable image loading for faster rendering (default: `false`, set to `true` for 2-5x speed boost)
 
 ### Concurrency Control
 
 The service implements intelligent request deduplication and concurrency management:
 
-- **Per-URL Locking**: Only one request can render a specific URL at a time. Concurrent requests for the same URL receive a `429 Too Many Requests` response with `Retry-After: 5` header
-- **Global Concurrency Limit**: Maximum concurrent renders across all URLs (configurable via `MAX_CONCURRENT_RENDERS`)
-- **Automatic Retry**: Clients receiving 429 should retry after the suggested delay. The second request will typically hit the cache and return instantly
+- **Per-URL Locking**: Only one request renders a specific URL at a time. Concurrent requests for the same URL wait for that render to finish and are then served from the cache, so crawlers get a `200` instead of an error
+- **Protocol-Agnostic Locking**: `http://` and `https://` variants of a URL share one lock, matching the shared cache key
+- **Global Concurrency Limit**: Maximum concurrent renders across all URLs (configurable via `MAX_CONCURRENT_RENDERS`). Requests over the limit receive `503`
+- **Give-up Path**: If the in-flight render fails or exceeds `LOCK_TTL`, the waiting request receives `429` with a `Retry-After: 5` header
 
 **Example:**
 ```
 10 concurrent requests for https://example.com/product/123
   ↓
 Request 1: Renders (1-2s) → Caches → Returns 200
-Request 2-10: Return 429 immediately (3ms)
+Request 2-10: Wait (polling the cache every 200ms)
   ↓
-After 5 seconds, retry
+Request 1 finishes and fills the cache
   ↓
-All requests: Return from cache (50ms) → 200
+Request 2-10: Served from cache (50ms) → 200 (one render total)
 ```
 
 ### Performance Optimization
