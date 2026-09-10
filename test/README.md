@@ -6,11 +6,25 @@ This directory contains tests for the Prerender service.
 
 ```
 test/
-├── unit/              # Unit tests for individual components
-│   └── redis-lock.test.js
-└── integration/       # Integration tests for full workflows
-    └── deduplication.test.js
+├── unit/              # Pure logic and raw Redis semantics
+│   ├── redis-lock.test.js
+│   └── url-normalize.test.js
+├── integration/       # Full workflows against a running service
+│   └── deduplication.test.js
+└── scenarios/         # Paths that need their own service configuration
+    ├── compose.js             # recreates the container with an override
+    ├── concurrency-limit.test.js
+    ├── allowed-domains.test.js
+    └── waiting.test.js
 ```
+
+`unit` and `integration` run against whatever is already up. `scenarios` drive
+`docker compose` themselves: each suite recreates the **prerender** container
+with a temporary override (a render limit of 1, a domain whitelist, a 2s wait),
+and puts it back on `compose.yml`'s environment afterwards. They reach Redis
+through `valkey-cli` inside the container, so valkey is never reconfigured and
+never has to publish a port. They must run one file at a time - hence
+`--test-concurrency=1` in the script - because they share one compose project.
 
 Tests use Node's built-in test runner (`node:test` + `node:assert`) and
 `fetch`, so there are no test dependencies to install - `npm install` alone is
@@ -56,6 +70,19 @@ npm run test:unit
 npm run test:integration
 ```
 
+### Scenario Tests (recreates the prerender container ~3 times, takes ~30s)
+```bash
+npm run test:scenarios
+```
+
+### Coverage
+```bash
+npm run test:coverage
+```
+Covers the modules the tests load in-process. `server.js` is not among them: it
+starts Chrome on require, so its logic is exercised through the integration and
+scenario suites instead.
+
 ### Watch Mode (re-run on file changes)
 ```bash
 npm run test:watch
@@ -83,6 +110,12 @@ PRERENDER_URL=http://10.240.0.11:3000 npm test
 - ✅ Duplicate concurrent requests wait for the in-flight render and get its output
 - ✅ Concurrent requests for different URLs
 - ✅ Cache hits are much faster than renders, and return the same body
+
+### Scenario Tests
+- ✅ `MAX_CONCURRENT_RENDERS` refuses a new URL with `503` but still serves a duplicate of a render already in flight
+- ✅ `ALLOWED_DOMAINS` renders a listed host and `404`s an unlisted one without taking a lock or writing a cache entry
+- ✅ A waiting request gives up with `429` + `Retry-After` after `MAX_WAIT_MS`, not after `LOCK_TTL`
+- ✅ A waiting request stops polling when its client disconnects
 
 ## Writing New Tests
 

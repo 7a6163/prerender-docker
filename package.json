@@ -5,10 +5,12 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test 'test/**/*.test.js'",
+    "test": "node --test 'test/unit/**/*.test.js' 'test/integration/**/*.test.js'",
     "test:unit": "node --test 'test/unit/**/*.test.js'",
     "test:integration": "node --test 'test/integration/**/*.test.js'",
-    "test:watch": "node --test --watch 'test/**/*.test.js'"
+    "test:watch": "node --test --watch 'test/**/*.test.js'",
+    "test:scenarios": "node --test --test-concurrency=1 'test/scenarios/**/*.test.js'",
+    "test:coverage": "node --test --experimental-test-coverage 'test/unit/**/*.test.js'"
   },
   "dependencies": {
     "ioredis": "^6.0.0",

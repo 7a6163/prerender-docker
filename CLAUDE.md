@@ -14,14 +14,16 @@ docker compose logs -f prerender   # logs; "Started Chrome" = ready
 curl http://localhost:3000/render?url=http://example.com
 docker compose exec valkey redis-cli del 'example.com'   # invalidate cache; DELETE /render is NOT routed upstream
 
-npm test                  # all tests (node:test runner)
+npm test                  # unit + integration (node:test runner)
 npm run test:unit         # needs Redis reachable at REDIS_URL
 npm run test:integration  # needs the service running on PRERENDER_URL (default localhost:3000)
+npm run test:scenarios    # drives docker compose itself: recreates the prerender container per suite
+npm run test:coverage     # in-process coverage (url-normalize.js only - see below)
 node --test test/unit/redis-lock.test.js                      # single file
 node --test --test-name-pattern="cache" 'test/**/*.test.js'   # single test by name
 ```
 
-Tests use Node's built-in runner (`node:test` + `node:assert` + `fetch`) - there are no devDependencies, no build step and no linter. Note the test globs must stay quoted in `package.json`, since `node --test <dir>` treats a directory as a module to load rather than a path to search. Integration tests hit the live service and public `httpbin.org`, so they fail offline; unit tests need Redis reachable, which `compose.yml` does not publish.
+Tests use Node's built-in runner (`node:test` + `node:assert` + `fetch`) - there are no devDependencies, no build step and no linter. `server.js` has **no in-process coverage**: requiring it starts Chrome, so its 150-odd lines of lock, wait and limit logic are covered behaviourally instead — the happy paths by `test/integration`, and the `503`/`404`/`429`/client-disconnect paths by `test/scenarios`, which recreate the container with the environment each one needs. Anything that can only be reached with different startup configuration belongs in `scenarios`. Note the test globs must stay quoted in `package.json`, since `node --test <dir>` treats a directory as a module to load rather than a path to search. Integration tests hit the live service and public `httpbin.org`, so they fail offline; unit tests need Redis reachable, which `compose.yml` does not publish.
 
 `PRERENDER_URL` and `REDIS_URL` steer the tests; runtime config is in `.env.example` / `compose.yml` (`REDIS_URL`, `PAGE_TTL`, `MAX_CONCURRENT_RENDERS`, `LOCK_TTL`, `MAX_WAIT_MS`, `ALLOWED_DOMAINS`, `STRIP_QUERY_PARAMS`, `PAGE_COMPRESS`, `DISABLE_IMAGES`, plus upstream's `WAIT_AFTER_LAST_REQUEST` / `PAGE_DONE_CHECK_INTERVAL`).
 

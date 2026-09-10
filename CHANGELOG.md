@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `test/scenarios`: a test tier that drives `docker compose` itself, so the paths reachable only with different startup configuration are covered automatically instead of by hand. It asserts that `MAX_CONCURRENT_RENDERS` refuses a new URL with `503` while still serving a duplicate of a render already in flight, that `ALLOWED_DOMAINS` `404`s an unlisted host without taking a lock or writing a cache entry, that a waiting request gives up after `MAX_WAIT_MS` rather than `LOCK_TTL`, and that it stops polling when its client disconnects. Each suite recreates the prerender container with a temporary override and restores `compose.yml`'s environment afterwards; Redis is reached through `valkey-cli` in the container, so valkey is never reconfigured or exposed
+
 ## [5.23.0] - 2026-09-10
 
 ### Added
