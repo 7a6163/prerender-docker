@@ -8,7 +8,6 @@
     "test": "mocha test/**/*.test.js --timeout 10000",
     "test:unit": "mocha test/unit/**/*.test.js",
     "test:integration": "mocha test/integration/**/*.test.js --timeout 30000",
-    "test:load": "mocha test/load/**/*.test.js --timeout 60000",
     "test:watch": "mocha test/**/*.test.js --watch"
   },
   "dependencies": {
@@ -22,5 +21,11 @@
     "chai": "^4.5.0",
     "mocha": "^10.8.2",
     "sinon": "^17.0.1"
+  },
+  "overrides": {
+    "ws": "^7.5.13",
+    "path-to-regexp": "^0.1.13",
+    "qs": "^6.16.0",
+    "body-parser": "^1.20.8"
   }
 }

@@ -8,9 +8,8 @@ This directory contains tests for the Prerender service.
 test/
 ├── unit/              # Unit tests for individual components
 │   └── redis-lock.test.js
-├── integration/       # Integration tests for full workflows
-│   └── deduplication.test.js
-└── load/             # Load and performance tests
+└── integration/       # Integration tests for full workflows
+    └── deduplication.test.js
 ```
 
 ## Prerequisites
@@ -48,11 +47,6 @@ npm run test:unit
 npm run test:integration
 ```
 
-### Load Tests Only
-```bash
-npm run test:load
-```
-
 ### Watch Mode (re-run on file changes)
 ```bash
 npm run test:watch
@@ -82,17 +76,11 @@ PRERENDER_URL=http://10.240.0.11:3000 npm test
 - ✅ Cache hit performance
 - ✅ Retry-After header validation
 
-### Load Tests
-- ⏳ High concurrency stress test
-- ⏳ Cache performance under load
-- ⏳ Lock contention handling
-
 ## Writing New Tests
 
 1. Create test file in appropriate directory:
    - `test/unit/` - Test individual functions/modules
    - `test/integration/` - Test complete workflows
-   - `test/load/` - Test performance under load
 
 2. Use Mocha + Chai:
 ```javascript
