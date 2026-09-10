@@ -198,10 +198,12 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
 
             # 429 (waited out an in-flight render) and 503 (over
-            # MAX_CONCURRENT_RENDERS) are deliberately passed through with their
-            # Retry-After headers. Do NOT rewrite them into a 200 serving
-            # index.html: that hands crawlers an empty SPA shell to index, while
-            # a 429/503 just tells them to come back.
+            # MAX_CONCURRENT_RENDERS, or a URL whose render just timed out) are
+            # deliberately passed through, each with a Retry-After. Do NOT
+            # rewrite them into a 200 serving index.html: that hands crawlers an
+            # empty SPA shell to index, while a 429/503 with Retry-After tells
+            # them when to come back. Sustained bare 5xx without that header is
+            # a de-indexing signal instead.
             proxy_intercept_errors off;
 
             proxy_hide_header Cache-Control;

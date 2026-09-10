@@ -23,6 +23,8 @@ const docker = (...args) =>
     execFileSync('docker', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
 const writeOverride = (env) => {
+    if (!Object.keys(env).length) return null;
+
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prerender-scenario-'));
     const file = path.join(dir, 'override.yml');
     fs.writeFileSync(file, [
@@ -44,8 +46,14 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * Chrome. Returns the log length at that point, so a test can read only what
  * its own requests produced.
  */
-const startWith = async (env, timeoutMs = 120000) => {
-    docker('compose', '-f', 'compose.yml', '-f', writeOverride(env), 'up', '-d', '--force-recreate', 'prerender');
+const startWith = async (env = {}, timeoutMs = 120000) => {
+    const override = writeOverride(env);
+    const files = override ? ['-f', 'compose.yml', '-f', override] : [];
+
+    // --no-deps: valkey is pulled in by depends_on, and recreating it wipes the
+    // keyspace the assertions rely on - "no lock was taken" would pass simply
+    // because Redis had just restarted
+    docker('compose', ...files, 'up', '-d', '--force-recreate', '--no-deps', 'prerender');
 
     const deadline = Date.now() + timeoutMs;
     for (;;) {
@@ -56,14 +64,22 @@ const startWith = async (env, timeoutMs = 120000) => {
     }
 };
 
-/** Puts the container back on the environment from compose.yml alone. */
-const restoreDefaults = () => docker('compose', 'up', '-d', '--force-recreate', 'prerender');
+/**
+ * Puts the container back on the environment from compose.yml alone, and waits
+ * for it: `up -d` returns when the container starts, not when Chrome is ready,
+ * so returning early leaves the next suite - or a plain `npm test` - talking to
+ * a service that refuses connections.
+ */
+const restoreDefaults = () => startWith();
 
 const valkey = (...args) => docker('compose', 'exec', '-T', 'valkey', 'valkey-cli', ...args).trim();
 const exists = (key) => Number(valkey('exists', key));
 
 const render = async (url, options) => {
-    const res = await fetch(`${BASE_URL}/render?url=${url}`, options);
+    // Encoded, because an unescaped `&` in the target would be read as another
+    // parameter of the render endpoint - the same trap nginx.conf.example warns
+    // about
+    const res = await fetch(`${BASE_URL}/render?url=${encodeURIComponent(url)}`, options);
     return { status: res.status, headers: res.headers, body: await res.text() };
 };
 
@@ -72,4 +88,20 @@ const render = async (url, options) => {
 const cacheKey = (url) => url.replace(/^https?:\/\//, '');
 const lockKey = (url) => `prerender:lock:${cacheKey(url)}`;
 
-module.exports = { startWith, restoreDefaults, logsSince, render, sleep, valkey, exists, cacheKey, lockKey };
+/** Starts, or removes, the container used as a host that never answers. */
+const blackhole = {
+    start() {
+        this.stop();
+        docker('run', '-d', '--name', 'prerender-blackhole', '--network', 'prerender-docker_default',
+            'node:26-alpine', '-e', "require('net').createServer(s => s.on('data', () => {})).listen(8080)");
+    },
+    stop() {
+        try {
+            docker('rm', '-f', 'prerender-blackhole');
+        } catch {
+            // Not running
+        }
+    }
+};
+
+module.exports = { startWith, restoreDefaults, logsSince, render, sleep, valkey, exists, cacheKey, lockKey, blackhole };

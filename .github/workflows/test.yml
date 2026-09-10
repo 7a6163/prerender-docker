@@ -1,0 +1,51 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      # The unit tests exercise Redis semantics directly
+      valkey:
+        image: valkey/valkey:9-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+
+      - run: npm ci
+
+      # Only the tiers that are deterministic here. test/integration renders
+      # pages from the public internet and test/scenarios recreates containers,
+      # so both belong on a machine with the stack up rather than in CI.
+      - name: Unit tests
+        run: npm run test:unit
+        env:
+          REDIS_URL: redis://localhost:6379
+
+      - name: Coverage
+        run: npm run test:coverage
+        env:
+          REDIS_URL: redis://localhost:6379
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      # Catches a Dockerfile that no longer builds, which the tests cannot
+      - name: Build the image
+        run: docker build .

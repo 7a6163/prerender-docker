@@ -179,8 +179,13 @@ then render one page and list requests that started but never finished:
 
 ```bash
 docker compose logs prerender --since 3m --no-log-prefix \
-  | awk '$2=="+"{c[$4]++} $2=="-"{c[$4]--} END{for(u in c) if(c[u]>0) print c[u], u}'
+  | awk '{split($4,u,"/"); h=u[3]} $2=="+"{c[h]++} $2=="-"{c[h]--} \
+         END{for(h in c) if(c[h]>0) print c[h], h}'
 ```
+
+That prints hostnames, aggregated - a widget whose long-poll URL carries a
+cache-buster would otherwise appear once per request. `BLOCK_HOSTS` wants
+hostnames, though a pasted URL is tolerated.
 
 Feed those hosts to `BLOCK_HOSTS`, which maps them to `127.0.0.1` inside Chrome
 so the connection is refused at once. None of it is content a crawler wants.

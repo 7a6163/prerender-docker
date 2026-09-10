@@ -31,9 +31,21 @@ if (DISABLE_IMAGES) {
 //
 // Resolved to 127.0.0.1 inside Chrome only, so the connection is refused at
 // once instead of hanging. None of it is content a crawler wants.
+// Entries may be pasted straight out of the request log, which prints whole
+// URLs. Chrome silently ignores a malformed rule, so a URL here would block
+// nothing and the only symptom would be renders that still time out.
+const toHost = (entry) => {
+    if (!entry.includes('://')) return entry;
+    try {
+        return new URL(entry).host;
+    } catch {
+        return entry;
+    }
+};
+
 const BLOCK_HOSTS = (process.env.BLOCK_HOSTS || '')
     .split(',')
-    .map((host) => host.trim())
+    .map((entry) => toHost(entry.trim()))
     .filter(Boolean);
 
 if (BLOCK_HOSTS.length) {
@@ -56,6 +68,11 @@ const MAX_CONCURRENT_RENDERS = parseInt(process.env.MAX_CONCURRENT_RENDERS, 10) 
 const LOCK_TTL = parseInt(process.env.LOCK_TTL, 10) || 30;
 const WAIT_INTERVAL = 200; // how often a waiting request re-checks the cache
 const MAX_WAIT_MS = parseInt(process.env.MAX_WAIT_MS, 10) || 8000;
+// How long a URL whose render timed out is refused without trying again. A
+// page that hangs cannot be cached (TIMEOUT_STATUS_CODE is not a cacheable
+// status), so without this every crawler hit would re-render it, hold a render
+// slot for the whole PAGE_LOAD_TIMEOUT and starve the URLs that do work.
+const TIMEOUT_COOLDOWN = parseInt(process.env.TIMEOUT_COOLDOWN, 10) || 60;
 
 // Track current rendering count
 let currentRenders = 0;
@@ -69,6 +86,7 @@ const RELEASE_LOCK = `if redis.call('get', KEYS[1]) == ARGV[1] then return redis
 console.log(`[Prerender Config] MAX_CONCURRENT_RENDERS: ${MAX_CONCURRENT_RENDERS}`);
 console.log(`[Prerender Config] LOCK_TTL: ${LOCK_TTL}s`);
 console.log(`[Prerender Config] MAX_WAIT_MS: ${MAX_WAIT_MS}ms`);
+console.log(`[Prerender Config] TIMEOUT_COOLDOWN: ${TIMEOUT_COOLDOWN}s`);
 
 // Domain filter first, before anything else in the chain: a URL we will not
 // serve should not take a lock, spend a render slot, or even be looked up in
@@ -108,12 +126,23 @@ server.use({
         const url = req.prerender.url;
         const cacheKey = url.replace(/^https?:\/\//, ''); // Same format as prerender-redis-cache-ng
         const lockKey = `prerender:lock:${cacheKey}`; // Same granularity as the cache: http/https share a lock
+        const timeoutKey = `prerender:timeout:${cacheKey}`;
 
         try {
             // Check if cached (skip lock if cache exists)
             if (await redis.exists(cacheKey)) {
                 console.log(`[Prerender] Cache hit, skipping lock: ${url}`);
                 next(); // Let cache middleware handle it
+                return;
+            }
+
+            // A URL that just timed out is refused without a second attempt: the
+            // page will hang again, and each attempt costs a render slot for the
+            // whole PAGE_LOAD_TIMEOUT
+            if (await redis.exists(timeoutKey)) {
+                console.log(`[Prerender] Render timed out recently, refusing for now: ${url}`);
+                res.setHeader('Retry-After', String(TIMEOUT_COOLDOWN));
+                res.send(503, `Rendering this page timed out. Please retry after ${TIMEOUT_COOLDOWN} seconds.`);
                 return;
             }
 
@@ -130,6 +159,7 @@ server.use({
                 if (currentRenders >= MAX_CONCURRENT_RENDERS) {
                     await redis.eval(RELEASE_LOCK, 1, lockKey, lockToken);
                     console.log(`[Prerender] Max concurrent renders reached (${currentRenders}/${MAX_CONCURRENT_RENDERS}), rejecting: ${url}`);
+                    res.setHeader('Retry-After', '5');
                     res.send(503, `Service busy. Currently rendering ${currentRenders} pages. Please retry in a few seconds.`);
                     return;
                 }
@@ -192,6 +222,21 @@ server.use({
 
     beforeSend: async function(req, res, next) {
         const url = req.prerender.url;
+
+        // A page that never reaches network idle returns whatever it had at
+        // PAGE_LOAD_TIMEOUT. With TIMEOUT_STATUS_CODE set that capture is not
+        // cached, which is right - but it also means nothing throttles the next
+        // attempt, so the timeout itself is recorded instead.
+        if (req.prerender.tab?.prerender?.timedout) {
+            const timeoutKey = `prerender:timeout:${url.replace(/^https?:\/\//, '')}`;
+            res.setHeader('Retry-After', String(TIMEOUT_COOLDOWN));
+            try {
+                await redis.set(timeoutKey, Date.now(), 'EX', TIMEOUT_COOLDOWN);
+                console.log(`[Prerender] Render timed out, refusing this URL for ${TIMEOUT_COOLDOWN}s: ${url}`);
+            } catch (err) {
+                console.error(`[Prerender] Failed to record the timeout for ${url}:`, err.message);
+            }
+        }
 
         // Release lock if this request holds it. Decrement first: a Redis failure here
         // must not leak the render slot, or the counter drifts up until every

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `TIMEOUT_COOLDOWN` (default 60s): a URL whose render just timed out is refused with `503` and `Retry-After` instead of being rendered again. `TIMEOUT_STATUS_CODE=503` stopped the partial capture being cached, but that also removed the only thing throttling the next attempt - every crawler hit would have taken a render slot for the whole `PAGE_LOAD_TIMEOUT` and starved the URLs that render fine
+- `.github/workflows/test.yml`: unit tests, coverage, `npm audit --omit=dev` and `docker build` on every push and pull request. The integration and scenario tiers stay out of CI on purpose - one needs the public internet, the other recreates containers
+- `test/scenarios/timeout-cooldown.test.js`, covering the timeout path end to end: a 5xx that is not cacheable, `Retry-After`, nothing written to the cache, and a retry refused in under a second instead of paying another `PAGE_LOAD_TIMEOUT`
+
+### Fixed
+- The concurrency `503` now carries `Retry-After`, which only the `429` did. `nginx.conf.example` claimed both had it
+- `BLOCK_HOSTS` accepts a pasted URL, not just a hostname: the log recipe that finds the offenders prints URLs, and Chrome silently ignores a malformed resolver rule - so the mistake would have looked like the setting doing nothing. The recipe now prints hostnames, aggregated, so one widget with a cache-buster in its poll URL is one line rather than many
+- `test:watch` and the single-test example in `CLAUDE.md` no longer match `test/scenarios`, which recreated containers three times in parallel on every file save
+- Scenario suites pass `--no-deps`, so recreating the prerender container no longer restarts valkey. Wiping the keyspace made the "no lock was taken" and "nothing was cached" assertions pass whether or not the code was correct
+- `restoreDefaults()` waits for Chrome, instead of returning while the container is still booting and leaving the next suite to fail on connection refused
+- The scenario helper encodes the target URL, so a test URL with more than one query parameter is no longer truncated at the first `&`
+
 ## [5.24.0] - 2026-09-10
 
 ### Added

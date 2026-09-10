@@ -156,31 +156,28 @@ docker run -d --name blackhole --network prerender-docker_default node:26-alpine
 # then render it with and without BLOCK_HOSTS=blackhole and compare
 ```
 
+`test/scenarios/timeout-cooldown.test.js` uses the same container for the
+timeout path, where the blackhole *is* the page being rendered.
+
 Unblocked the render takes the full `PAGE_LOAD_TIMEOUT` and the page's own
 JavaScript never runs; blocked it finishes in well under a second with the
 content intact.
 
 ## Continuous Integration
 
-Add to your CI pipeline (GitHub Actions example):
+`.github/workflows/test.yml` runs on every push to `main` and every pull
+request: `npm ci`, the unit tests and coverage against a valkey service
+container, `npm audit --omit=dev`, and `docker build` to catch a Dockerfile that
+no longer builds.
 
-```yaml
-name: Tests
+The other two tiers are deliberately not in CI. `integration` renders pages from
+the public internet, and `scenarios` recreates containers - both belong on a
+machine with the stack up, where a failure means something rather than a flake.
+Run them before a release:
 
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '26'
-      - run: docker compose up -d
-      - run: sleep 5
-      - run: npm install
-      - run: npm test
+```bash
+docker compose up -d
+npm test && npm run test:scenarios
 ```
 
 ## Troubleshooting
