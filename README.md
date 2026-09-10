@@ -67,6 +67,7 @@ curl http://localhost:3000/render?url=http://example.com
 - `ALLOWED_DOMAINS`: Comma-separated hostnames this service may render; everything else gets `404` (default: unset, meaning any URL is rendered - see Security)
 - `STRIP_QUERY_PARAMS`: Query parameters removed before the URL becomes a lock, a cache key and a render (default: a built-in tracking-parameter list; set to empty to strip nothing)
 - `BROWSER_FORCE_RESTART_PERIOD`: How often Chrome is recycled regardless of in-flight requests, in milliseconds (upstream default: `3600000`)
+- `BLOCK_HOSTS`: Comma-separated hosts Chrome must not reach (default: none) - see Pages that never finish loading
 - `DISABLE_IMAGES`: Disable image loading (default: `false`). Measured no effect on real pages - see below
 - `WAIT_AFTER_LAST_REQUEST`: Milliseconds to wait after the last network request before capturing (upstream default: `500`; `compose.yml` sets `300`)
 - `PAGE_DONE_CHECK_INTERVAL`: Page-done polling interval in milliseconds (upstream default: `500`; `compose.yml` sets `100`)
@@ -156,6 +157,40 @@ Two things follow:
 
 Trimming the two fixed waits saves ~400ms per render with no truncated
 content (verified: same page, 1.93MB of HTML either way).
+
+#### Pages that never finish loading
+
+A page is considered rendered once no request has been in flight for
+`WAIT_AFTER_LAST_REQUEST`. Some things on a page never allow that: a support
+chat widget long-polls, a YouTube embed holds its connection open, a payment
+iframe sits there. With one of those present, **every** render burns the whole
+`PAGE_LOAD_TIMEOUT` and returns whatever the page had reached by then - and if
+the offender is a blocking `<script>`, the page's own JavaScript may not have
+run at all, so the cached HTML is missing the content.
+
+Find them by turning on upstream's request log:
+
+```yaml
+- LOG_REQUESTS=true
+```
+
+then render one page and list requests that started but never finished:
+
+```bash
+docker compose logs prerender --since 3m --no-log-prefix \
+  | awk '$2=="+"{c[$4]++} $2=="-"{c[$4]--} END{for(u in c) if(c[u]>0) print c[u], u}'
+```
+
+Feed those hosts to `BLOCK_HOSTS`, which maps them to `127.0.0.1` inside Chrome
+so the connection is refused at once. None of it is content a crawler wants.
+
+Measured against a page holding one script from a host that accepts the
+connection and never answers:
+
+| | Render time | Content |
+|---|---|---|
+| Not blocked | 8.20s (the full `PAGE_LOAD_TIMEOUT`) | missing - the page's JS never ran |
+| Blocked | **0.78s** | correct |
 
 #### Memory
 

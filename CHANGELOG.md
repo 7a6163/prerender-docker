@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `BLOCK_HOSTS`: hosts Chrome must not reach, mapped to `127.0.0.1` in the browser so their connections are refused instead of hanging. A page counts as rendered once nothing has been in flight for `WAIT_AFTER_LAST_REQUEST`, and chat widgets, video embeds and payment iframes never allow that - one of them on the page means every render burns the whole `PAGE_LOAD_TIMEOUT`, and a blocking script that hangs can stop the page's own JavaScript running, so the cached HTML is a shell. Measured against a host that accepts connections and never answers: 8.20s and missing content unblocked, 0.78s and correct content blocked
 - `test/scenarios`: a test tier that drives `docker compose` itself, so the paths reachable only with different startup configuration are covered automatically instead of by hand. It asserts that `MAX_CONCURRENT_RENDERS` refuses a new URL with `503` while still serving a duplicate of a render already in flight, that `ALLOWED_DOMAINS` `404`s an unlisted host without taking a lock or writing a cache entry, that a waiting request gives up after `MAX_WAIT_MS` rather than `LOCK_TTL`, and that it stops polling when its client disconnects. Each suite recreates the prerender container with a temporary override and restores `compose.yml`'s environment afterwards; Redis is reached through `valkey-cli` in the container, so valkey is never reconfigured or exposed
 
 ## [5.23.0] - 2026-09-10

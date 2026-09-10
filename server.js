@@ -23,6 +23,24 @@ if (DISABLE_IMAGES) {
     console.log('[Prerender Config] Images disabled for faster rendering');
 }
 
+// Hosts Chrome must not reach. A page is considered rendered when no request
+// has been in flight for WAIT_AFTER_LAST_REQUEST, and some embeds never let
+// that happen: a chat widget long-polls, a video player keeps its connection,
+// a payment iframe sits there. One of those on the page means every render
+// burns the whole PAGE_LOAD_TIMEOUT and returns whatever it had by then.
+//
+// Resolved to 127.0.0.1 inside Chrome only, so the connection is refused at
+// once instead of hanging. None of it is content a crawler wants.
+const BLOCK_HOSTS = (process.env.BLOCK_HOSTS || '')
+    .split(',')
+    .map((host) => host.trim())
+    .filter(Boolean);
+
+if (BLOCK_HOSTS.length) {
+    chromeFlags.push(`--host-resolver-rules=${BLOCK_HOSTS.map((host) => `MAP ${host} 127.0.0.1`).join(',')}`);
+    console.log(`[Prerender Config] BLOCK_HOSTS: ${BLOCK_HOSTS.join(', ')}`);
+}
+
 // forwardHeaders is deliberately absent: prerender 5.21.6 never reads it, so
 // passing it only suggests the crawler's headers reach the page. They do not.
 const server = prerender({

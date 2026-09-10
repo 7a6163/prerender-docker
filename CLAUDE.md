@@ -25,9 +25,20 @@ node --test --test-name-pattern="cache" 'test/**/*.test.js'   # single test by n
 
 Tests use Node's built-in runner (`node:test` + `node:assert` + `fetch`) - there are no devDependencies, no build step and no linter. `server.js` has **no in-process coverage**: requiring it starts Chrome, so its 150-odd lines of lock, wait and limit logic are covered behaviourally instead — the happy paths by `test/integration`, and the `503`/`404`/`429`/client-disconnect paths by `test/scenarios`, which recreate the container with the environment each one needs. Anything that can only be reached with different startup configuration belongs in `scenarios`. Note the test globs must stay quoted in `package.json`, since `node --test <dir>` treats a directory as a module to load rather than a path to search. Integration tests hit the live service and public `httpbin.org`, so they fail offline; unit tests need Redis reachable, which `compose.yml` does not publish.
 
-`PRERENDER_URL` and `REDIS_URL` steer the tests; runtime config is in `.env.example` / `compose.yml` (`REDIS_URL`, `PAGE_TTL`, `MAX_CONCURRENT_RENDERS`, `LOCK_TTL`, `MAX_WAIT_MS`, `ALLOWED_DOMAINS`, `STRIP_QUERY_PARAMS`, `PAGE_COMPRESS`, `DISABLE_IMAGES`, plus upstream's `WAIT_AFTER_LAST_REQUEST` / `PAGE_DONE_CHECK_INTERVAL`).
+`PRERENDER_URL` and `REDIS_URL` steer the tests; runtime config is in `.env.example` / `compose.yml` (`REDIS_URL`, `PAGE_TTL`, `MAX_CONCURRENT_RENDERS`, `LOCK_TTL`, `MAX_WAIT_MS`, `ALLOWED_DOMAINS`, `STRIP_QUERY_PARAMS`, `PAGE_COMPRESS`, `BLOCK_HOSTS`, `DISABLE_IMAGES`, plus upstream's `WAIT_AFTER_LAST_REQUEST` / `PAGE_DONE_CHECK_INTERVAL`).
 
 Setting `ALLOWED_DOMAINS` makes the integration tests fail: they render `httpbin.org` and `example.org`, which will not be in your list.
+
+## Why a render takes as long as it does
+
+Upstream decides a page is rendered when nothing has been in flight for
+`WAIT_AFTER_LAST_REQUEST`. Chat widgets, video embeds and payment iframes never
+reach that state, so a page carrying one costs the full `PAGE_LOAD_TIMEOUT`
+every time, and a *blocking* script that hangs can stop the page's own
+JavaScript from running — a fast-looking cache full of shells. `BLOCK_HOSTS`
+exists for this; `LOG_REQUESTS=true` plus the awk in README's "Pages that never
+finish loading" names the offenders. Suspect this before suspecting CPU: the
+symptom is `page timed out` in the log on renders that still return 200.
 
 ## Architecture
 

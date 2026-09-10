@@ -142,6 +142,24 @@ afterEach(async () => {
 });
 ```
 
+## Reproducing a page that never finishes loading
+
+`BLOCK_HOSTS` has no automated test, because the interesting behaviour belongs
+to Chrome. This recipe reproduces it in about a minute:
+
+```bash
+# A host that accepts connections and never answers, like a long-polling widget
+docker run -d --name blackhole --network prerender-docker_default node:26-alpine \
+  node -e "require('net').createServer(s => s.on('data',()=>{})).listen(8080)"
+
+# A page whose blocking script points at it, served on the same network,
+# then render it with and without BLOCK_HOSTS=blackhole and compare
+```
+
+Unblocked the render takes the full `PAGE_LOAD_TIMEOUT` and the page's own
+JavaScript never runs; blocked it finishes in well under a second with the
+content intact.
+
 ## Continuous Integration
 
 Add to your CI pipeline (GitHub Actions example):
