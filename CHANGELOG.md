@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Render slot counter no longer leaks when Redis fails during lock release (previously drifted up until every request returned 503)
 - Lock key now uses the protocol-agnostic cache key, so `http://` and `https://` variants of a URL no longer render twice
 - Invalid `MAX_CONCURRENT_RENDERS` / `LOCK_TTL` values now fall back to defaults instead of silently disabling the limit
+- `MAX_CONCURRENT_RENDERS` no longer rejects requests that could wait for an in-flight render of the same URL, which disabled deduplication under load - the limit is now checked only after the lock is won
+- Duplicate requests wait `MAX_WAIT_MS` (default 8s) instead of `LOCK_TTL`, so a cache that has stopped being written no longer parks every duplicate for 30s
+- Waiting requests stop polling when the client disconnects, instead of polling to the timeout and writing to a dead socket
+- Waiting requests check cache and lock in one pipelined Redis round trip, and check before sleeping rather than after (was a fixed 200ms penalty on every deduplicated request)
 - Prevented duplicate rendering of the same URL by concurrent requests
 - Added resource protection against excessive concurrent renders
 - **Cache optimization**: Eliminated unnecessary lock checks for cached content, preventing false 429 responses

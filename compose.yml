@@ -9,7 +9,8 @@ services:
       - MAX_CONCURRENT_RENDERS=10  # Max concurrent rendering (different URLs)
       - LOCK_TTL=30  # Lock timeout (seconds)
       - DISABLE_IMAGES=false  # Measured no effect on real pages, see README
-      - WAIT_AFTER_LAST_REQUEST=100  # Upstream default 500ms; measured ~400ms saved per render
+      - WAIT_AFTER_LAST_REQUEST=300  # Upstream default 500ms; lower saves time but risks capturing mid-load
+      - MAX_WAIT_MS=8000  # How long a duplicate request waits for the in-flight render before 429
       - PAGE_DONE_CHECK_INTERVAL=100  # Upstream default 500ms
     # Idle ~300MB, plus ~90MB per concurrent render, so MAX_CONCURRENT_RENDERS=10
     # tops out around 1.2GB. Keep this above that or the host absorbs the spike.

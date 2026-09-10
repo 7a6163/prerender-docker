@@ -35,12 +35,14 @@ const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 const MAX_CONCURRENT_RENDERS = parseInt(process.env.MAX_CONCURRENT_RENDERS, 10) || 10;
 const LOCK_TTL = parseInt(process.env.LOCK_TTL, 10) || 30;
 const WAIT_INTERVAL = 200; // how often a waiting request re-checks the cache
+const MAX_WAIT_MS = parseInt(process.env.MAX_WAIT_MS, 10) || 8000;
 
 // Track current rendering count
 let currentRenders = 0;
 
 console.log(`[Prerender Config] MAX_CONCURRENT_RENDERS: ${MAX_CONCURRENT_RENDERS}`);
 console.log(`[Prerender Config] LOCK_TTL: ${LOCK_TTL}s`);
+console.log(`[Prerender Config] MAX_WAIT_MS: ${MAX_WAIT_MS}ms`);
 
 // Request deduplication middleware
 server.use({
@@ -51,17 +53,9 @@ server.use({
 
         try {
             // Check if cached (skip lock if cache exists)
-            const cached = await redis.exists(cacheKey);
-            if (cached) {
+            if (await redis.exists(cacheKey)) {
                 console.log(`[Prerender] Cache hit, skipping lock: ${url}`);
                 next(); // Let cache middleware handle it
-                return;
-            }
-
-            // Check global concurrent limit
-            if (currentRenders >= MAX_CONCURRENT_RENDERS) {
-                console.log(`[Prerender] Max concurrent renders reached (${currentRenders}/${MAX_CONCURRENT_RENDERS}), rejecting: ${url}`);
-                res.send(503, `Service busy. Currently rendering ${currentRenders} pages. Please retry in a few seconds.`);
                 return;
             }
 
@@ -69,6 +63,17 @@ server.use({
             const lockAcquired = await redis.set(lockKey, Date.now(), 'EX', LOCK_TTL, 'NX');
 
             if (lockAcquired) {
+                // Only a request that would start a new render is subject to the
+                // concurrency limit. Checking it earlier rejected duplicates of
+                // URLs already being rendered, which switched deduplication off
+                // exactly when load made it worth having.
+                if (currentRenders >= MAX_CONCURRENT_RENDERS) {
+                    await redis.del(lockKey);
+                    console.log(`[Prerender] Max concurrent renders reached (${currentRenders}/${MAX_CONCURRENT_RENDERS}), rejecting: ${url}`);
+                    res.send(503, `Service busy. Currently rendering ${currentRenders} pages. Please retry in a few seconds.`);
+                    return;
+                }
+
                 // Lock acquired successfully, proceed with rendering
                 currentRenders++;
                 console.log(`[Prerender] Lock acquired (${currentRenders}/${MAX_CONCURRENT_RENDERS}), rendering: ${url}`);
@@ -81,19 +86,35 @@ server.use({
             // serve it from the cache - crawlers throttle themselves when given a 429.
             // The cache is written (pageLoaded) before the lock is released (beforeSend),
             // so a missing lock means that render failed and nothing is coming.
+            //
+            // Capped by MAX_WAIT_MS rather than the lock's lifetime: the cache plugin
+            // holds its own Redis client that stops reconnecting after 10 attempts, and
+            // once it gives up the cache is never written again - waiting out the whole
+            // lock would park every duplicate request for LOCK_TTL to no purpose.
             // ponytail: 200ms polling, switch to Redis pub/sub if waiters pile up
             console.log(`[Prerender] Already rendering, waiting for cache: ${url}`);
 
-            for (let waited = 0; waited < LOCK_TTL * 1000; waited += WAIT_INTERVAL) {
-                await new Promise(resolve => setTimeout(resolve, WAIT_INTERVAL));
+            for (let waited = 0; waited < MAX_WAIT_MS; waited += WAIT_INTERVAL) {
+                const [[, cached], [, locked]] = await redis.pipeline().exists(cacheKey).exists(lockKey).exec();
 
-                if (await redis.exists(cacheKey)) {
-                    console.log(`[Prerender] Cache filled while waiting (${waited + WAIT_INTERVAL}ms): ${url}`);
+                if (cached) {
+                    console.log(`[Prerender] Cache filled while waiting (${waited}ms): ${url}`);
                     next(); // Let cache middleware serve it
                     return;
                 }
 
-                if (!(await redis.exists(lockKey))) break; // Holder gave up without caching
+                if (!locked) break; // Holder gave up without caching
+
+                // Nothing to send a response to, so stop polling for one. Checked
+                // rather than listened for: only the real req reaches a plugin, and
+                // its 'close' also fires on healthy requests.
+                if (req.destroyed || req.socket?.destroyed) {
+                    console.log(`[Prerender] Client left while waiting (${waited}ms): ${url}`);
+                    res.send(499, 'Client closed request while waiting for an in-flight render.');
+                    return;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, WAIT_INTERVAL));
             }
 
             console.log(`[Prerender] Gave up waiting for the in-flight render: ${url}`);

@@ -61,9 +61,10 @@ curl http://localhost:3000/render?url=http://example.com
 - `REDIS_URL`: Redis connection URL (default: `redis://localhost:6379`)
 - `PAGE_TTL`: Cache expiration time in seconds (default: `86400` = 1 day, set to `0` for no expiration)
 - `MAX_CONCURRENT_RENDERS`: Maximum concurrent rendering processes (default: `10`)
-- `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders, and how long a duplicate request waits before giving up (default: `30`; keep it above `PAGE_LOAD_TIMEOUT`, which defaults to 20s)
+- `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders (default: `30`; keep it above `PAGE_LOAD_TIMEOUT`, which defaults to 20s)
+- `MAX_WAIT_MS`: How long a duplicate request waits for the in-flight render before returning `429` (default: `8000`)
 - `DISABLE_IMAGES`: Disable image loading (default: `false`). Measured no effect on real pages - see below
-- `WAIT_AFTER_LAST_REQUEST`: Milliseconds to wait after the last network request before capturing (upstream default: `500`; `compose.yml` sets `100`)
+- `WAIT_AFTER_LAST_REQUEST`: Milliseconds to wait after the last network request before capturing (upstream default: `500`; `compose.yml` sets `300`)
 - `PAGE_DONE_CHECK_INTERVAL`: Page-done polling interval in milliseconds (upstream default: `500`; `compose.yml` sets `100`)
 
 ### Concurrency Control
@@ -72,8 +73,8 @@ The service implements intelligent request deduplication and concurrency managem
 
 - **Per-URL Locking**: Only one request renders a specific URL at a time. Concurrent requests for the same URL wait for that render to finish and are then served from the cache, so crawlers get a `200` instead of an error
 - **Protocol-Agnostic Locking**: `http://` and `https://` variants of a URL share one lock, matching the shared cache key
-- **Global Concurrency Limit**: Maximum concurrent renders across all URLs (configurable via `MAX_CONCURRENT_RENDERS`). Requests over the limit receive `503`
-- **Give-up Path**: If the in-flight render fails or exceeds `LOCK_TTL`, the waiting request receives `429` with a `Retry-After: 5` header
+- **Global Concurrency Limit**: `MAX_CONCURRENT_RENDERS` caps renders across all URLs. It applies only to requests that would start a new render - a request that can wait for an in-flight render of the same URL is never rejected by it, or deduplication would switch off under exactly the load that motivates it. Requests that would exceed the limit receive `503`
+- **Give-up Path**: A waiting request gives up with `429` and `Retry-After: 5` after `MAX_WAIT_MS` (default 8s), or as soon as the in-flight render fails without writing the cache. It also stops polling if the client disconnects
 
 **Example:**
 ```
@@ -99,6 +100,13 @@ Measured on this setup (Wikipedia `/wiki/Cat`, repeated runs):
 | Cold render, defaults | 2.9-3.7s |
 | Cold render, `DISABLE_IMAGES=true` | 2.9-3.4s (no measurable change) |
 | Cold render, `WAIT_AFTER_LAST_REQUEST=100` + `PAGE_DONE_CHECK_INTERVAL=100` | **2.3-2.7s** |
+
+`compose.yml` settles on `WAIT_AFTER_LAST_REQUEST=300` rather than the 100 that
+was measured. A page whose JavaScript chains a request more than the grace
+period after the previous one settles gets captured mid-load, still returns
+`200`, and is therefore cached for `PAGE_TTL` - a week by default - with nothing
+detecting it. The measurement above is one page; the failure mode is per-site,
+so buy the last 200ms only after checking your own pages.
 
 Two things follow:
 
