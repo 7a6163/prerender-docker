@@ -97,10 +97,12 @@ server.use({
             // The cache is written (pageLoaded) before the lock is released (beforeSend),
             // so a missing lock means that render failed and nothing is coming.
             //
-            // Capped by MAX_WAIT_MS rather than the lock's lifetime: the cache plugin
-            // holds its own Redis client that stops reconnecting after 10 attempts, and
-            // once it gives up the cache is never written again - waiting out the whole
-            // lock would park every duplicate request for LOCK_TTL to no purpose.
+            // Capped by MAX_WAIT_MS rather than the lock's lifetime: nothing here can
+            // tell a slow render from a holder that will never write the cache, and a
+            // client waiting out a 30s lock is worse than one told to come back. The
+            // cache plugin's own Redis client reconnects indefinitely as of
+            // prerender-redis-cache-ng 1.1.0, so a stuck cache is no longer permanent,
+            // but it can still outlast any single request.
             // ponytail: 200ms polling, switch to Redis pub/sub if waiters pile up
             console.log(`[Prerender] Already rendering, waiting for cache: ${url}`);
 
