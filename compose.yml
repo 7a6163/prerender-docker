@@ -2,9 +2,16 @@ services:
   prerender:
     build: .
     ports:
-      - "3000:3000"
+      # Bound to localhost: this endpoint renders whatever URL it is handed, so
+      # anything that can reach it can read internal HTTP services through it.
+      # If your nginx is a container, put it on this network and delete this
+      # ports block entirely.
+      - "127.0.0.1:3000:3000"
     environment:
       - REDIS_URL=redis://valkey:6379
+      # Only render your own hostnames, comma separated - everything else 404s.
+      # Leave it unset only if the service is unreachable from anywhere else.
+      # - ALLOWED_DOMAINS=example.com,www.example.com
       - PAGE_TTL=604800  # Cache TTL: 7 days (seconds)
       - MAX_CONCURRENT_RENDERS=10  # Max concurrent rendering (different URLs)
       - LOCK_TTL=30  # Lock timeout (seconds)
@@ -16,7 +23,10 @@ services:
     # tops out around 1.2GB. Keep this above that or the host absorbs the spike.
     mem_limit: 1500m
     depends_on:
-      - valkey
+      valkey:
+        # Without this the first requests after a cold start hit the dedup
+        # layer's fail-open path and each render the same URL separately
+        condition: service_healthy
     restart: unless-stopped
 
   valkey:
@@ -24,7 +34,16 @@ services:
     volumes:
       - valkey-data:/data
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    # Entries are whole rendered pages (a big article runs ~2MB) kept for
+    # PAGE_TTL, so the default unbounded + noeviction combination ends with
+    # writes failing, which silently stops the cache being written at all.
+    command: valkey-server --appendonly yes --maxmemory 1gb --maxmemory-policy allkeys-lru
+    mem_limit: 1200m
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 volumes:
   valkey-data:

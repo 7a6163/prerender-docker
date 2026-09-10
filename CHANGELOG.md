@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `ALLOWED_DOMAINS`: comma-separated hostnames this service may render; everything else gets a `404` before any lock, render slot or cache lookup is spent. Unset keeps the previous permissive behaviour, because upstream's whitelist plugin `404`s everything when the list is empty - which would take a service down rather than secure it. Startup now warns when it is unset
+- `prerender.sendPrerenderHeader()`: sends `X-Prerender: 1` with the page requests this service makes, which is the second loop guard in `nginx.conf.example` (without it that map never fires and loop protection rests entirely on the user agent carrying "Prerender")
+- `prerender.browserForceRestart()`: recycles Chrome hourly. Upstream's other restart path only fires when no request is in flight, and requests parked in the dedup wait loop keep that set non-empty, so on a busy service Chrome was never recycled and simply grew into `mem_limit`
+
+### Changed
+- Port 3000 is published on `127.0.0.1` instead of every interface. The endpoint renders whatever URL it is handed, so anything that could reach it could read internal HTTP services through it and have the result cached for `PAGE_TTL` (demonstrated against a container with no published ports)
+- The domain filter now runs first in the plugin chain. It sat after deduplication and the cache, so a rejected URL still took a lock and a render slot, and a rejected URL that was already cached was served before the filter could refuse it
+- Valkey runs with `--maxmemory 1gb --maxmemory-policy allkeys-lru` and its own `mem_limit`. Cache entries are whole rendered pages (~2MB for a large article) kept for `PAGE_TTL`, and the default unbounded/`noeviction` pair ends with writes failing, which stops the cache being written at all - the exact state `MAX_WAIT_MS` exists to bound
+- Valkey has a healthcheck and `prerender` waits for it, instead of starting alongside it and serving the first requests through the dedup layer's fail-open path
+- Valkey is started with `valkey-server` rather than the `redis-server` compatibility symlink
+
 ## [5.22.1] - 2026-09-10
 
 ### Changed

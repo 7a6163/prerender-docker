@@ -63,9 +63,28 @@ curl http://localhost:3000/render?url=http://example.com
 - `MAX_CONCURRENT_RENDERS`: Maximum concurrent rendering processes (default: `10`)
 - `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders (default: `30`; keep it above `PAGE_LOAD_TIMEOUT`, which defaults to 20s)
 - `MAX_WAIT_MS`: How long a duplicate request waits for the in-flight render before returning `429` (default: `8000`)
+- `ALLOWED_DOMAINS`: Comma-separated hostnames this service may render; everything else gets `404` (default: unset, meaning any URL is rendered - see Security)
+- `BROWSER_FORCE_RESTART_PERIOD`: How often Chrome is recycled regardless of in-flight requests, in milliseconds (upstream default: `3600000`)
 - `DISABLE_IMAGES`: Disable image loading (default: `false`). Measured no effect on real pages - see below
 - `WAIT_AFTER_LAST_REQUEST`: Milliseconds to wait after the last network request before capturing (upstream default: `500`; `compose.yml` sets `300`)
 - `PAGE_DONE_CHECK_INTERVAL`: Page-done polling interval in milliseconds (upstream default: `500`; `compose.yml` sets `100`)
+
+### Security
+
+This service renders whatever URL it is given, so anything that can reach port
+3000 can use it to fetch arbitrary hosts - including internal services that are
+not otherwise reachable - and have the result cached for `PAGE_TTL`. Two
+settings keep that closed:
+
+- `compose.yml` publishes the port on `127.0.0.1` only. If your front end is a
+  container, put it on this compose network and drop the `ports` block entirely.
+- `ALLOWED_DOMAINS=example.com,www.example.com` restricts rendering to your own
+  hostnames; everything else gets a `404` before a lock, a render slot or a
+  cache lookup is spent. Startup warns when it is unset.
+
+Note that `prerender.blacklist()` - which this service used on its own before -
+does nothing at all unless `BLACKLISTED_DOMAINS` is set, so it was never a
+restriction.
 
 ### Concurrency Control
 

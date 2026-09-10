@@ -51,6 +51,19 @@ console.log(`[Prerender Config] MAX_CONCURRENT_RENDERS: ${MAX_CONCURRENT_RENDERS
 console.log(`[Prerender Config] LOCK_TTL: ${LOCK_TTL}s`);
 console.log(`[Prerender Config] MAX_WAIT_MS: ${MAX_WAIT_MS}ms`);
 
+// Domain filter first, before anything else in the chain: a URL we will not
+// serve should not take a lock, spend a render slot, or even be looked up in
+// the cache. Registering the whitelist unconditionally would 404 everything
+// when ALLOWED_DOMAINS is unset, which takes the service down rather than
+// securing it - so an unset list keeps the (empty, permissive) blacklist.
+server.use(process.env.ALLOWED_DOMAINS ? prerender.whitelist() : prerender.blacklist());
+
+if (process.env.ALLOWED_DOMAINS) {
+    console.log(`[Prerender Config] ALLOWED_DOMAINS: ${process.env.ALLOWED_DOMAINS}`);
+} else {
+    console.warn('[Prerender Config] ALLOWED_DOMAINS is unset: this service will render ANY URL it is given. Set it, and do not expose port 3000 beyond your own front end.');
+}
+
 // Request deduplication middleware
 server.use({
     requestReceived: async function(req, res, next) {
@@ -163,8 +176,19 @@ server.use({
 });
 
 server.use(redisCache);
-server.use(prerender.blacklist());
+
+// Sends X-Prerender: 1 with the page requests this service makes, which is the
+// second loop guard in nginx.conf.example - without it that map never fires and
+// loop protection rests entirely on the user agent carrying "Prerender".
+server.use(prerender.sendPrerenderHeader());
+
 server.use(prerender.httpHeaders());
 server.use(prerender.removeScriptTags());
+
+// Restarts Chrome hourly (BROWSER_FORCE_RESTART_PERIOD). Upstream's other
+// restart path only fires when no request is in flight, and requests parked in
+// the dedup wait loop keep that set non-empty, so on a busy service Chrome
+// would never be recycled - it would just grow into mem_limit.
+server.use(prerender.browserForceRestart());
 
 server.start();

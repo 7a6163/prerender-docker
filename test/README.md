@@ -29,6 +29,10 @@ docker compose logs -f prerender
 # Wait until you see "Started Chrome"
 ```
 
+The integration tests render `httpbin.org` and `example.org`, so they fail
+against a deployment that sets `ALLOWED_DOMAINS`. Run them against a service
+without it.
+
 Unit tests talk to Redis directly, but `compose.yml` does not publish valkey's
 port. Either publish it, or point the tests at another Redis:
 ```bash
