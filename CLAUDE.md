@@ -23,7 +23,7 @@ node --test --test-name-pattern="cache" 'test/**/*.test.js'   # single test by n
 
 Tests use Node's built-in runner (`node:test` + `node:assert` + `fetch`) - there are no devDependencies, no build step and no linter. Note the test globs must stay quoted in `package.json`, since `node --test <dir>` treats a directory as a module to load rather than a path to search. Integration tests hit the live service and public `httpbin.org`, so they fail offline; unit tests need Redis reachable, which `compose.yml` does not publish.
 
-`PRERENDER_URL` and `REDIS_URL` steer the tests; runtime config is in `.env.example` / `compose.yml` (`REDIS_URL`, `PAGE_TTL`, `MAX_CONCURRENT_RENDERS`, `LOCK_TTL`, `MAX_WAIT_MS`, `ALLOWED_DOMAINS`, `DISABLE_IMAGES`, plus upstream's `WAIT_AFTER_LAST_REQUEST` / `PAGE_DONE_CHECK_INTERVAL`).
+`PRERENDER_URL` and `REDIS_URL` steer the tests; runtime config is in `.env.example` / `compose.yml` (`REDIS_URL`, `PAGE_TTL`, `MAX_CONCURRENT_RENDERS`, `LOCK_TTL`, `MAX_WAIT_MS`, `ALLOWED_DOMAINS`, `STRIP_QUERY_PARAMS`, `PAGE_COMPRESS`, `DISABLE_IMAGES`, plus upstream's `WAIT_AFTER_LAST_REQUEST` / `PAGE_DONE_CHECK_INTERVAL`).
 
 Setting `ALLOWED_DOMAINS` makes the integration tests fail: they render `httpbin.org` and `example.org`, which will not be in your list.
 

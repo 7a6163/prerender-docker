@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Upgraded `prerender-redis-cache-ng` to 1.2.0, which gzips cache entries. On a real page from the site this serves, one entry went from 163,896 bytes of Redis memory to 20,560 - and to 14,416 once the plugin ordering fix below stopped the script tags being stored too. Reads detect gzip by its magic bytes, so entries written by earlier versions stay readable and age out through their TTL. `PAGE_COMPRESS=0` stores plain JSON
+
 ### Fixed
 - The cache plugin is now registered last, so cached entries are what actually gets sent. It sat before `removeScriptTags` and `httpHeaders`, whose `pageLoaded` hooks run in registration order, so entries were stored with the script tags still in them and with the status code read from the response rather than from `<meta name="prerender-status-code">`. A crawler got script-free HTML from the render that filled the cache and script-laden HTML from every hit after it — measured on a real page: 0 script tags versus 38, and 77KB versus 126KB
 
