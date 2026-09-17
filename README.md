@@ -60,7 +60,7 @@ curl http://localhost:3000/render?url=http://example.com
 
 - `REDIS_URL`: Redis connection URL (default: `redis://localhost:6379`)
 - `PAGE_TTL`: Cache expiration time in seconds (default: `86400` = 1 day, set to `0` for no expiration)
-- `PAGE_COMPRESS`: Gzip cache entries (default: on; set to `0`/`false`/`off`/`no` to store plain JSON). Entries written before compression existed stay readable - the read path detects gzip by its magic bytes
+- `PAGE_COMPRESS`: Compress cache entries (default: on; set to `0`/`false`/`off`/`no` to store plain JSON). Entries from every storage era stay readable - the read path sniffs magic bytes for zstd, gzip and plain JSON - so changing versions or flipping this setting never needs a cache flush
 - `MAX_CONCURRENT_RENDERS`: Maximum concurrent rendering processes (default: `10`)
 - `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders (default: `30`; keep it above `PAGE_LOAD_TIMEOUT`, which defaults to 20s)
 - `MAX_WAIT_MS`: How long a duplicate request waits for the in-flight render before returning `429` (default: `8000`)

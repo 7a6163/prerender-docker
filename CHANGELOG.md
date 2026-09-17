@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.26.0] - 2026-09-18
+
+### Changed
+- Upgraded `prerender-redis-cache-ng` to 2.0.0, which compresses cache entries with zstd instead of gzip. On a page from the site this serves, the stored payload went from 18,660 bytes under gzip to 17,758 under zstd, and decompression on a cache hit is roughly half the cost. **No flush and no migration**: verified by hand-writing a gzip-era entry and a pre-compression plain-JSON entry into Redis and confirming 2.0.0 serves both, because the read path sniffs magic bytes for all three eras. The plugin now requires Node >= 22.15.0, where `node:zlib` gained zstd; the image is on 26
+
 ## [5.25.1] - 2026-09-11
 
 ### Fixed
