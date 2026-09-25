@@ -60,7 +60,7 @@ curl http://localhost:3000/render?url=http://example.com
 
 - `REDIS_URL`: Redis connection URL (default: `redis://localhost:6379`)
 - `PAGE_TTL`: Cache expiration time in seconds (default: `86400` = 1 day, set to `0` for no expiration)
-- `PAGE_COMPRESS`: Compress cache entries (default: on; set to `0`/`false`/`off`/`no` to store plain JSON). Entries from every storage era stay readable - the read path sniffs magic bytes for zstd, gzip and plain JSON - so changing versions or flipping this setting never needs a cache flush
+- `PAGE_COMPRESS`: Compress cache entries (default: on; set to `0`/`false`/`off`/`no` to store plain JSON). **Upgrading** never needs a cache flush: the read path sniffs magic bytes for zstd, gzip and plain JSON, so entries from older versions stay readable. **Rolling back below 5.26.0 does** - see Rolling back
 - `MAX_CONCURRENT_RENDERS`: Maximum concurrent rendering processes (default: `10`)
 - `LOCK_TTL`: Lock timeout in seconds for preventing duplicate renders (default: `30`; keep it above `PAGE_LOAD_TIMEOUT`, which defaults to 20s)
 - `MAX_WAIT_MS`: How long a duplicate request waits for the in-flight render before returning `429` (default: `8000`)
@@ -72,6 +72,28 @@ curl http://localhost:3000/render?url=http://example.com
 - `DISABLE_IMAGES`: Disable image loading (default: `false`). Measured no effect on real pages - see below
 - `WAIT_AFTER_LAST_REQUEST`: Milliseconds to wait after the last network request before capturing (upstream default: `500`; `compose.yml` sets `300`)
 - `PAGE_DONE_CHECK_INTERVAL`: Page-done polling interval in milliseconds (upstream default: `500`; `compose.yml` sets `100`)
+
+### Rolling back
+
+Compatibility only runs forward. 5.26.0 writes zstd; 5.25.x and earlier
+(`prerender-redis-cache-ng` 1.x) cannot read it. Worse than a cache miss: this
+service's deduplication treats "the key exists" as a cache hit and skips the
+lock, so a key that exists but cannot be decoded bypasses both deduplication
+and `MAX_CONCURRENT_RENDERS`. Every request for such a URL starts its own
+render. Measured against a 5.25.1 container with one zstd entry: three
+concurrent requests, three `Cache hit, skipping lock` lines, three renders -
+where a readable entry costs zero renders and an absent one costs one.
+
+So before rolling back below 5.26.0, or running 5.25.x and 5.26.x replicas
+against the same Redis during a rolling update:
+
+```bash
+docker compose exec valkey valkey-cli flushdb
+```
+
+`PAGE_COMPRESS=0` on 5.26.0 makes new writes plain JSON, which every version
+reads, but it does not rewrite entries that are already zstd - those still
+need the flush.
 
 ### Security
 
